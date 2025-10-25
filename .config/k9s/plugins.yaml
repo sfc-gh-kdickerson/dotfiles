@@ -1,0 +1,50 @@
+plugins:
+  TmuxPodLogsPopupInNeovim:
+    shortCut: "l"
+    override: true
+    dangerous: false
+    background: true
+    description: "Pod Logs in Neovim Popup"
+    scopes:
+      - pod
+    command: tmux
+    args:
+      - display-popup
+      - -w
+      - 90%
+      - -h
+      - 90%
+      - "nvim -c 'PodLogs $NAME $NAMESPACE $CONTEXT json' -"
+  TmuxPodLogsSplitInNeovim:
+    shortCut: "Shift-L"
+    override: true
+    dangerous: false
+    background: true
+    description: "Pod Logs in Neovim Split"
+    scopes:
+      - pod
+    command: tmux
+    args:
+      - split-window
+      - -h
+      - "nvim -c 'PodLogs $NAME $NAMESPACE $CONTEXT json' -"
+  OpenFlinkUI:
+    shortCut: "Ctrl-F"
+    override: true
+    dangerous: false
+    background: true
+    description: "Flink UI"
+    scopes:
+      - pod
+    command: tmux
+    args:
+      - display-popup
+      - -x
+      - R
+      - -y
+      - S
+      - -w
+      - 40%
+      - -h
+      - 20%
+      - "$XDG_CONFIG_HOME/k9s/scripts/port-forward.sh $NAME 8081"

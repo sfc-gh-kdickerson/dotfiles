@@ -1,0 +1,3 @@
+literal:export WHISPER_PASSWORD=engineerservice===>REMOVED
+literal:export WHISPER_KEY_PATH=/Users/kaleb/Documents/Whisper/localhost.apple.com.key.pem===>REMOVED
+literal:export WHISPER_CERT_PATH=/Users/kaleb/Documents/Whisper/localhost.apple.com.chain.pem===>REMOVED

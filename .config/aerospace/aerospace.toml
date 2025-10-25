@@ -1,0 +1,129 @@
+start-at-login = true
+after-startup-command = [
+    'exec-and-forget sketchybar',
+    'exec-and-forget borders active_color=0xFFA6E3A1 inactive_color=0xFFEBA0AC width=1.5 order=above blacklist="Webex,iPhone Mirroring"',
+]
+exec-on-workspace-change = [
+    '/bin/bash',
+    '-c',
+    'sketchybar --trigger aerospace_workspace_change AEROSPACE_FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE AEROSPACE_PREV_WORKSPACE=$AEROSPACE_PREV_WORKSPACE',
+]
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+# add nix user level binaries to aerospace path
+[exec.env-vars]
+PATH = '${HOME}/.nix-profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
+
+[gaps]
+inner.horizontal = 7
+inner.vertical =   7
+outer.left =       7
+outer.bottom =     7
+outer.right =      7
+outer.top = [{ monitor."DELL S2721Q" = 45}, 10]
+
+# keybinds
+[mode.main.binding]
+alt-shift-c = 'reload-config'
+
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
+alt-shift-h = ['join-with left', 'mode main']
+alt-shift-j = ['join-with down', 'mode main']
+alt-shift-k = ['join-with up', 'mode main']
+alt-shift-l = ['join-with right', 'mode main']
+
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-4 = 'workspace 4'
+alt-5 = 'workspace 5'
+alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+alt-9 = 'workspace 9'
+alt-0 = 'workspace 10'
+alt-shift-1 = 'move-node-to-workspace 1'
+alt-shift-2 = 'move-node-to-workspace 2'
+alt-shift-3 = 'move-node-to-workspace 3'
+alt-shift-4 = 'move-node-to-workspace 4'
+alt-shift-5 = 'move-node-to-workspace 5'
+alt-shift-6 = 'move-node-to-workspace 6'
+alt-shift-7 = 'move-node-to-workspace 7'
+alt-shift-8 = 'move-node-to-workspace 8'
+alt-shift-9 = 'move-node-to-workspace 9'
+alt-shift-0 = 'move-node-to-workspace 10'
+
+# toggle to tiled layout
+alt-slash = 'layout tiles horizontal vertical'
+# toggle to accordion layout
+alt-comma = 'layout accordion horizontal vertical'
+# toggle fullscreen
+alt-f = 'fullscreen'
+# toggle tiling and floating
+alt-t = 'layout floating tiling'
+
+# resize stuff
+alt-shift-minus = 'resize smart -50'
+alt-shift-equal = 'resize smart +50'
+alt-r = 'mode resize'
+[mode.resize.binding]
+h = 'resize width -50'
+j = 'resize height +50'
+k = 'resize height -50'
+l = 'resize width +50'
+enter = 'mode main'
+esc = 'mode main'
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden)'
+run = ['layout floating']  
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(chrome|firefox)'
+if.during-aerospace-startup = false
+run = ['layout tiling', 'move-node-to-workspace 1']  
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(wezterm|ghostty|kitty)'
+if.during-aerospace-startup = false
+run = ['layout tiling', 'move-node-to-workspace 2']  
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(intellij|jetbrains)'
+run = ['layout tiling', 'move-node-to-workspace 3']  
+
+[[on-window-detected]]
+if.app-id = 'com.apple.Safari'
+if.during-aerospace-startup = true
+run = ['layout tiling', 'move-node-to-workspace 4']  
+
+[[on-window-detected]]
+if.during-aerospace-startup = true
+if.app-name-regex-substring = 'postman'
+run = ['layout tiling', 'move-node-to-workspace 5']  
+
+[[on-window-detected]]
+if.during-aerospace-startup = true
+if.app-name-regex-substring = 'radar'
+run = ['layout tiling', 'move-node-to-workspace 6']  
+
+[[on-window-detected]]
+if.during-aerospace-startup = true
+if.app-name-regex-substring = 'compass'
+run = ['layout tiling', 'move-node-to-workspace 7']  
+
+[[on-window-detected]]
+if.app-id = 'Cisco-Systems.Spark'
+run = ['layout tiling', 'move-node-to-workspace 9']  
+
+[[on-window-detected]]
+if.app-id = 'com.tinyspeck.slackmacgap'
+if.during-aerospace-startup = true
+run = ['layout tiling', 'move-node-to-workspace 10']  
+[workspace-to-monitor-force-assignment]
+10 = ['secondary', 'main']

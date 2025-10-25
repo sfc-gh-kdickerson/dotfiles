@@ -1,0 +1,10 @@
+#!/bin/bash
+
+options=(
+    active_color=0xFFA6E3A1 
+    inactive_color=0xFFEBA0AC 
+    width=1.5 
+    order=above 
+    blacklist="Webex,iPhone Mirroring"
+)
+borders "${options[@]}"
