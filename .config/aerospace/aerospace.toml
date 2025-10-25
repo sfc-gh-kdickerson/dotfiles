@@ -1,6 +1,5 @@
 start-at-login = true
 after-startup-command = [
-    'exec-and-forget sketchybar',
     'exec-and-forget borders active_color=0xFFA6E3A1 inactive_color=0xFFEBA0AC width=1.5 order=above blacklist="Webex,iPhone Mirroring"',
 ]
 exec-on-workspace-change = [
@@ -22,7 +21,14 @@ inner.vertical =   7
 outer.left =       7
 outer.bottom =     7
 outer.right =      7
-outer.top = [{ monitor."DELL S2721Q" = 45}, 10]
+outer.top = [
+    { monitor."DELL S2721Q"    = 45 },
+    { monitor."DELL P2723DE"   = 40 }, 
+    { monitor."LS34A650U"      = 40 }, 
+    { monitor."^Built-in.*"    = 10 }, # built-in display (MacBook screen) 
+    { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
+    0                                  # should be unreachable but satisfies syntax
+]
 
 # keybinds
 [mode.main.binding]

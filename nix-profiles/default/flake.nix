@@ -16,20 +16,25 @@
             bash
             bat
             cargo
+            delta
             direnv
             eza
             fzf
             delta
             go
+            gotools
             jq
+            lazygit
             neovim
-            nodejs_20
+            nodejs_22
+            prettier
             ripgrep
             stow
             stylua
             tmux
             tree
             tree-sitter
+            uv
             watch
             wget
             yarn

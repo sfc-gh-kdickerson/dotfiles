@@ -63,3 +63,21 @@ vim.api.nvim_create_user_command("NewSession", function()
   end
   vim.cmd("mksession " .. nvim_dir .. "/default_session.vim")
 end, { desc = "Creates new session in .nvim directory from cwd" })
+
+vim.api.nvim_create_user_command("Git", function()
+  -- require("neogit").open({kind = "replace"})
+  require("neogit").open()
+  local current_buf = vim.api.nvim_get_current_buf()
+  local bufs = vim.api.nvim_list_bufs()
+  print(current_buf, vim.inspect(bufs))
+  for _, buf in ipairs(bufs) do
+    if buf ~= current_buf and vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].buftype == '' then
+      pcall(function()
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end)
+    end
+  end
+  vim.keymap.set('n', 'q', ':quit<CR>', { buffer = current_buf, desc = 'Quit dedicated neogit buffer' })
+  vim.keymap.set('n', '<C-g>', ':quit<CR>', { buffer = current_buf, desc = 'Quit dedicated neogit buffer' })
+end, { desc = "Opens Neogit immediately" })
+
