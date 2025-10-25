@@ -1,5 +1,6 @@
 start-at-login = true
 after-startup-command = [
+    'exec-and-forget sketchybar',
     'exec-and-forget borders active_color=0xFFA6E3A1 inactive_color=0xFFEBA0AC width=1.5 order=above blacklist="Webex,iPhone Mirroring"',
 ]
 exec-on-workspace-change = [
@@ -21,14 +22,7 @@ inner.vertical =   7
 outer.left =       7
 outer.bottom =     7
 outer.right =      7
-outer.top = [
-    { monitor."DELL S2721Q"    = 45 },
-    { monitor."DELL P2723DE"   = 40 }, 
-    { monitor."LS34A650U"      = 40 }, 
-    { monitor."^Built-in.*"    = 10 }, # built-in display (MacBook screen) 
-    { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
-    0                                  # should be unreachable but satisfies syntax
-]
+outer.top = [{ monitor."DELL S2721Q" = 45}, {monitor."LS34A650U" = 40}, 10]
 
 # keybinds
 [mode.main.binding]
@@ -80,6 +74,9 @@ alt-r = 'mode resize'
 
 # app keybinds
 alt-g = ["exec-and-forget open -a 'Ghostty'"]
+alt-w = ["exec-and-forget open -a 'WezTerm'"]
+alt-m = ["exec-and-forget open -a 'Gmail'"]
+alt-c = ["exec-and-forget open -a 'Google Calendar'"]
 
 [mode.resize.binding]
 h = 'resize width -50'
@@ -90,17 +87,19 @@ enter = 'mode main'
 esc = 'mode main'
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden)'
-run = ['layout floating']  
+if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|1password|cafe|gemini|graphite)'
+run = ['layout floating']
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(chrome|firefox)'
-if.during-aerospace-startup = false
+if.app-id = 'com.jetbrains.cwm.guest'
+run = ['layout floating']
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(chrome|firefox|prisma)'
 run = ['layout tiling', 'move-node-to-workspace 1']  
 
 [[on-window-detected]]
 if.app-name-regex-substring = '(wezterm|ghostty|kitty)'
-if.during-aerospace-startup = false
 run = ['layout tiling', 'move-node-to-workspace 2']  
 
 [[on-window-detected]]
@@ -108,32 +107,28 @@ if.app-name-regex-substring = '(intellij|jetbrains)'
 run = ['layout tiling', 'move-node-to-workspace 3']  
 
 [[on-window-detected]]
-if.app-id = 'com.apple.Safari'
-if.during-aerospace-startup = true
+if.app-name-regex-substring = 'cursor'
 run = ['layout tiling', 'move-node-to-workspace 4']  
 
 [[on-window-detected]]
-if.during-aerospace-startup = true
 if.app-name-regex-substring = 'postman'
 run = ['layout tiling', 'move-node-to-workspace 5']  
 
 [[on-window-detected]]
-if.during-aerospace-startup = true
-if.app-name-regex-substring = 'radar'
+if.app-name-regex-substring = 'jira'
 run = ['layout tiling', 'move-node-to-workspace 6']  
 
 [[on-window-detected]]
-if.during-aerospace-startup = true
 if.app-name-regex-substring = 'compass'
 run = ['layout tiling', 'move-node-to-workspace 7']  
 
 [[on-window-detected]]
-if.app-id = 'Cisco-Systems.Spark'
+if.app-name-regex-substring = 'zoom'
 run = ['layout tiling', 'move-node-to-workspace 9']  
 
 [[on-window-detected]]
 if.app-id = 'com.tinyspeck.slackmacgap'
-if.during-aerospace-startup = true
 run = ['layout tiling', 'move-node-to-workspace 10']  
 [workspace-to-monitor-force-assignment]
 10 = ['secondary', 'main']
+

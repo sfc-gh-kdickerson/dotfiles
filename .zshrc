@@ -20,12 +20,12 @@ zinit ice depth"1" lucid; zinit light romkatv/powerlevel10k
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # plugins
+zinit light zsh-users/zsh-autosuggestions
 zinit light zsh-users/zsh-syntax-highlighting
-zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
-zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
+zinit light ptavares/zsh-direnv
 autoload -Uz compinit
 compinit -D
-zinit ice wait"1" lucid; zinit light Aloxaf/fzf-tab
+zinit light Aloxaf/fzf-tab
 
 # zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
 #     atclone"./atuin init zsh > init.zsh; ./atuin gen-completions --shell zsh > _atuin" \
@@ -34,21 +34,19 @@ if type -p atuin > /dev/null; then
     zinit light atuinsh/atuin
 fi
 
-ZVM_VI_ESCAPE_BINDKEY=jj
 zinit ice depth"1" lucid; zinit light jeffreytse/zsh-vi-mode
+# need this so atuin keybind doesn't get overridden by zvm
 function zvm_after_init() {
-    # need this so atuin keybind doesn't get overridden by zvm
     bindkey '^R' atuin-search
 }
 
 # Oh My Zsh snippets
-zinit snippet OMZP::aws
-zinit snippet OMZP::git
 zinit snippet OMZP::sudo
+zinit snippet OMZP::aws
 zinit snippet OMZP::colored-man-pages
-
-# Remind me to use aliases
-zinit ice wait"2" lucid; zinit light MichaelAquilina/zsh-you-should-use
+zinit snippet OMZP::git
+# zinit snippet OMZP::kubectl
+# zinit snippet OMZP::kubectx
 
 # History
 HISTFILE=~/.zsh_history
@@ -111,3 +109,23 @@ function nix-profile-sync() {
     nix flake update;
     nix profile upgrade "nix-profiles/default"
 }
+
+# sfid
+eval "$(sf aliases)"
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/kdickerson/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+export PATH="/opt/homebrew/opt/go@1.23/bin:$PATH"

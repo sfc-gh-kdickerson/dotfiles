@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-COLOR="$THM_GREEN"
+COLOR="$THM_SKY"
 
 sketchybar --add item battery right \
 	--set battery \

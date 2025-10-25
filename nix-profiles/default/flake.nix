@@ -17,12 +17,15 @@
             bat
             cargo
             delta
+            delta
+            delve
             direnv
             eza
             fzf
-            delta
             go
+            golangci-lint
             gotools
+            graphite-cli
             jq
             lazygit
             neovim

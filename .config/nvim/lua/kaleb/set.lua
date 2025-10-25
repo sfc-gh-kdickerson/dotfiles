@@ -26,7 +26,6 @@ vim.o.winborder = "rounded"
 
 vim.diagnostic.config({
   virtual_text = true,
-  underline = true,
   severity_sort = true,
   signs = {
     text = {

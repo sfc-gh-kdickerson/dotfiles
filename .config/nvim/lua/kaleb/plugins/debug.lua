@@ -1,12 +1,12 @@
 return {
   { "theHamsta/nvim-dap-virtual-text", event = "VeryLazy", opts = {} },
-  -- {
-  --   "mfussenegger/nvim-dap-python",
-  --   ft = "python",
-  --   config = function()
-  --     require("dap-python").setup(vim.fn.getcwd() .. "/.venv/bin/python")
-  --   end,
-  -- },
+  {
+    "mfussenegger/nvim-dap-python",
+    ft = "python",
+    config = function()
+      require("dap-python").setup(vim.fn.getcwd() .. "/.venv/bin/python")
+    end,
+  },
   {
     "mfussenegger/nvim-dap",
     lazy = true,
