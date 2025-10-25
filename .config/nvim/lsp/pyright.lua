@@ -5,11 +5,10 @@ return {
     python = {
       pythonPath = utils.get_python_path(),
       analysis = {
-        typeCheckingMode = "strict", -- off, basic, standard, strict
+        typeCheckingMode = "basic",
         autoSearchPaths = true,
-        diagnosticMode = "openFilesOnly", -- openFilesOnly, workspace
+        diagnosticMode = "openFilesOnly",
         useLibraryCodeForTypes = true,
-        reportMatchNotExhaustive = true,
       },
     },
   },

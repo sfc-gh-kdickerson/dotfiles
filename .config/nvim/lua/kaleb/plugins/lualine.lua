@@ -31,9 +31,11 @@ return {
           lualine_x = {
             utils.python_venv,
           },
-
           lualine_y = {
-            "kulala",
+            {
+              require("minuet.lualine"),
+              display_on_idle = true,
+            },
             "lsp_status",
             "progress",
           },
