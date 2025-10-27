@@ -4,7 +4,7 @@ COLOR="$THM_RED"
 
 sketchybar --add item calevent right \
 	--set calevent update_freq=60 \
-	label.max_chars=40 \
+	label.max_chars=34 \
 	scroll_texts=on \
 	icon.color="$COLOR" \
 	icon.padding_left=10 \
