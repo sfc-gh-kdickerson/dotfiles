@@ -68,9 +68,11 @@ return {
       null_ls.setup({
         -- debug = true,
         sources = {
+          null_ls.builtins.code_actions.gitsigns,
           null_ls.builtins.formatting.black,
+          null_ls.builtins.formatting.goimports,
           null_ls.builtins.formatting.isort,
-          null_ls.builtins.formatting.stylua,
+          null_ls.builtins.diagnostics.mypy,
           null_ls.builtins.formatting.prettier.with({
             filetypes = {
               "javascript",
@@ -83,10 +85,10 @@ return {
               "txt",
             },
           }),
+          null_ls.builtins.formatting.stylua,
           null_ls.builtins.diagnostics.tidy.with({
             args = { "-errors" },
           }),
-          null_ls.builtins.diagnostics.mypy,
         },
       })
     end,
@@ -100,5 +102,39 @@ return {
       "williamboman/mason-lspconfig.nvim",
       "nvimtools/none-ls.nvim",
     },
+  },
+  {
+    "rachartier/tiny-inline-diagnostic.nvim",
+    ft = { "python", "rust" },
+    priority = 1000,
+    config = function()
+      vim.diagnostic.config({
+        virtual_text = false,
+        underline = false,
+        severity_sort = true,
+        signs = {
+          text = {
+            [vim.diagnostic.severity.ERROR] = "●",
+            [vim.diagnostic.severity.WARN] = "●",
+            [vim.diagnostic.severity.HINT] = "●",
+            [vim.diagnostic.severity.INFO] = "●",
+          },
+        },
+      })
+      require("tiny-inline-diagnostic").setup({
+        options = {
+          show_source = {
+            enabled = true,
+          },
+          add_messages = {
+            display_count = true,
+          },
+          multilines = {
+            enabled = true,
+            always_show = true,
+          },
+        },
+      })
+    end,
   },
 }
