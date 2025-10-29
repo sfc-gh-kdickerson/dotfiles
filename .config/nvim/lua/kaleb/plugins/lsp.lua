@@ -105,7 +105,7 @@ return {
   },
   {
     "rachartier/tiny-inline-diagnostic.nvim",
-    ft = {"python"},
+    ft = { "python", "rust" },
     priority = 1000,
     config = function()
       vim.diagnostic.config({
