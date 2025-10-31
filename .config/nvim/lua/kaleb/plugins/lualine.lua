@@ -32,10 +32,6 @@ return {
             utils.python_venv,
           },
           lualine_y = {
-            {
-              require("minuet.lualine"),
-              display_on_idle = true,
-            },
             "lsp_status",
             "progress",
           },
