@@ -20,12 +20,12 @@ zinit ice depth"1" lucid; zinit light romkatv/powerlevel10k
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # plugins
-zinit light zsh-users/zsh-autosuggestions
+zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit light zsh-users/zsh-syntax-highlighting
-zinit light ptavares/zsh-direnv
+zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
 autoload -Uz compinit
 compinit -D
-zinit light Aloxaf/fzf-tab
+zinit ice wait"1" lucid; zinit light Aloxaf/fzf-tab
 
 # zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
 #     atclone"./atuin init zsh > init.zsh; ./atuin gen-completions --shell zsh > _atuin" \
@@ -34,19 +34,18 @@ if type -p atuin > /dev/null; then
     zinit light atuinsh/atuin
 fi
 
+ZVM_VI_ESCAPE_BINDKEY=jj
 zinit ice depth"1" lucid; zinit light jeffreytse/zsh-vi-mode
-# need this so atuin keybind doesn't get overridden by zvm
 function zvm_after_init() {
+    # need this so atuin keybind doesn't get overridden by zvm
     bindkey '^R' atuin-search
 }
 
 # Oh My Zsh snippets
-zinit snippet OMZP::sudo
 zinit snippet OMZP::aws
 zinit snippet OMZP::colored-man-pages
 zinit snippet OMZP::git
-# zinit snippet OMZP::kubectl
-# zinit snippet OMZP::kubectx
+zinit snippet OMZP::sudo
 
 # History
 HISTFILE=~/.zsh_history
