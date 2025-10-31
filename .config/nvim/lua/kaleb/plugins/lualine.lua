@@ -1,8 +1,11 @@
 local utils = require("kaleb.utils")
+vim.opt.laststatus = 0
+vim.opt.cmdheight = 0
 
 return {
   {
     "nvim-lualine/lualine.nvim",
+    enabled = false,
     event = "BufReadPre",
     dependencies = {
       {
