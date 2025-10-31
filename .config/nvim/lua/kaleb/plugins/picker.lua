@@ -27,10 +27,11 @@ return {
     -- picker -- 
     -- super powerful general purpose finder
     { "<leader>e", function() Snacks.explorer() end, desc = "File Explorer" },
-    { "<leader><space>", function() Snacks.picker.smart({ cwd = vim.fn.getcwd() }) end, desc = "Smart Find Files" },
+    -- { "<leader><space>", function() Snacks.picker.smart({ cwd = vim.fn.getcwd() }) end, desc = "Smart Find Files" },
 
     -- finders - with the intent of finding/going somewhere
-    { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
+    -- { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" }, -- fb is high friction keybinding
+    { "<leader>fo", function() Snacks.picker.buffers() end, desc = "Buffers" }, -- fo = find open buffer
     { "<leader>fc", function() Snacks.picker.files({ cwd = "~/dotfiles" }) end, desc = "Find Config File" },
     { "<leader>ff", function()
       Snacks.picker.files({ exclude=picker_ignore_patterns })
