@@ -22,7 +22,15 @@ inner.vertical =   7
 outer.left =       7
 outer.bottom =     7
 outer.right =      7
-outer.top = [{ monitor."DELL S2721Q" = 45}, {monitor."LS34A650U" = 40}, 10]
+outer.top = [
+    { monitor."DELL S2721Q"    = 45 },
+    { monitor."DELL P2723DE"   = 40 },
+    { monitor."LS34A650U"      = 40 },
+    { monitor."^Built-in.*"    = 10 }, # built-in display (MacBook screen)
+    { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
+    0                                  # should be unreachable but satisfies syntax
+]
+
 
 # keybinds
 [mode.main.binding]
@@ -108,17 +116,21 @@ run = ['layout tiling', 'move-node-to-workspace 3']
 
 [[on-window-detected]]
 if.app-name-regex-substring = 'cursor'
+if.during-aerospace-startup = true
 run = ['layout tiling', 'move-node-to-workspace 4']  
 
 [[on-window-detected]]
+if.during-aerospace-startup = true
 if.app-name-regex-substring = 'postman'
 run = ['layout tiling', 'move-node-to-workspace 5']  
 
 [[on-window-detected]]
+if.during-aerospace-startup = true
 if.app-name-regex-substring = 'jira'
 run = ['layout tiling', 'move-node-to-workspace 6']  
 
 [[on-window-detected]]
+if.during-aerospace-startup = true
 if.app-name-regex-substring = 'compass'
 run = ['layout tiling', 'move-node-to-workspace 7']  
 
@@ -128,6 +140,7 @@ run = ['layout tiling', 'move-node-to-workspace 9']
 
 [[on-window-detected]]
 if.app-id = 'com.tinyspeck.slackmacgap'
+if.during-aerospace-startup = true
 run = ['layout tiling', 'move-node-to-workspace 10']  
 [workspace-to-monitor-force-assignment]
 10 = ['secondary', 'main']
