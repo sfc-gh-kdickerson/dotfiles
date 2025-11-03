@@ -31,6 +31,9 @@ return {
     config = function()
       local aerial = require("aerial")
       aerial.setup({
+        ignore = {
+          filetypes = { "sh" },
+        },
         highlight_mode = "full_width",
         icons = {
           Class = "",
@@ -47,8 +50,8 @@ return {
         attach_mode = "global",
         highlight_on_hover = true,
         link_tree_to_folds = true,
-        open_automatic = true,
-        close_automatic_events = { "unsupported" },
+        open_automatic = false,
+        -- close_automatic_events = { "unsupported" },
         float = {
           override = function(conf, _)
             conf.relative = "editor"
