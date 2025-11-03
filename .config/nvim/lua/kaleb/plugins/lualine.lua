@@ -5,11 +5,10 @@ vim.opt.cmdheight = 0
 return {
   {
     "nvim-lualine/lualine.nvim",
-    enabled = false,
+    enabled = true,
     event = "BufReadPre",
     dependencies = {
       {
-        "milanglacier/minuet-ai.nvim",
         "letieu/harpoon-lualine",
         lazy = true,
         dependencies = {

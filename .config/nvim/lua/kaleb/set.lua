@@ -45,3 +45,27 @@ vim.api.nvim_create_autocmd("TextYankPost", {
     vim.highlight.on_yank()
   end,
 })
+
+local macro_augroup = vim.api.nvim_create_augroup("MacroRecordingNotifier", { clear = true })
+
+-- Notification for when recording starts
+vim.api.nvim_create_autocmd("RecordingEnter", {
+  group = macro_augroup,
+  callback = function()
+    local register = vim.fn.reg_recording()
+    -- 4. Send the notification
+    vim.notify(
+      string.format("Recording Macro @%s", register),
+      vim.log.levels.INFO,
+      { title = "Macro Recording Started" }
+    )
+  end,
+})
+
+-- Notification for when recording stops
+vim.api.nvim_create_autocmd("RecordingLeave", {
+  group = macro_augroup,
+  callback = function()
+    vim.notify("Macro Recording Finished", vim.log.levels.INFO, { title = "Macro Recording Complete" })
+  end,
+})

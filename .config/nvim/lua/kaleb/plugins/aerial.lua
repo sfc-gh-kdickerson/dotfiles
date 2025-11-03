@@ -31,8 +31,11 @@ return {
     config = function()
       local aerial = require("aerial")
       aerial.setup({
-        ignore = {
-          filetypes = { "sh" },
+        keymaps = {
+          ["<CR>"] = function()
+            aerial.select()
+            aerial.open({ focus = false })
+          end,
         },
         highlight_mode = "full_width",
         icons = {
@@ -51,6 +54,7 @@ return {
         highlight_on_hover = true,
         link_tree_to_folds = true,
         open_automatic = false,
+        close_on_select = false,
         -- close_automatic_events = { "unsupported" },
         float = {
           override = function(conf, _)
@@ -84,16 +88,6 @@ return {
             vim.defer_fn(function()
               aerial.open({ focus = false })
             end, 100)
-          end
-        end,
-      })
-      vim.api.nvim_create_autocmd("User", {
-        pattern = "AerialSymbolsUpdate",
-        callback = function(args)
-          local buf = args.buf
-          local symbols = require("aerial").num_symbols(buf)
-          if symbols == 0 then
-            require("aerial").close()
           end
         end,
       })
