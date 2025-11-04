@@ -13,7 +13,9 @@ local lsps = {
 }
 vim.lsp.enable(lsps)
 
+local lsp_attach_group = vim.api.nvim_create_augroup("LspAttachConfig", { clear = true })
 vim.api.nvim_create_autocmd("LspAttach", {
+  group = lsp_attach_group,
   callback = function(args)
     local bufnr = args.buf
     -- stylua: ignore start

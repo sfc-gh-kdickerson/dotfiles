@@ -37,6 +37,15 @@ return {
             aerial.open({ focus = false })
           end,
         },
+        on_attach = function(bufnr)
+          -- Jump forwards/backwards with '{' and '}'
+          vim.keymap.set("n", "{", function()
+            aerial.prev()
+          end, { buffer = bufnr })
+          vim.keymap.set("n", "}", function()
+            aerial.next()
+          end, { buffer = bufnr })
+        end,
         highlight_mode = "full_width",
         icons = {
           Class = "",

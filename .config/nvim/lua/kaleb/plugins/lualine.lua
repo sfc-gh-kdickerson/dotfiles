@@ -20,12 +20,26 @@ return {
       require("lualine").setup({
         options = {
           theme = COLORSCHEME,
+          globalstatus = true,
         },
         sections = {
           lualine_a = { "mode" },
-          lualine_b = { "branch", "diff", "diagnostics", "harpoon2", "searchcount" },
+          lualine_b = {
+            "branch",
+            { "harpoon2", icon = "", padding = { left = 0, right = 1 } },
+            "diff",
+            "diagnostics",
+            "searchcount",
+          },
           lualine_c = {
-            "filename",
+            {
+              "filetype",
+              separator = { right = "" },
+              padding = { right = 0, left = 1 },
+              colored = true,
+              icon_only = true,
+            },
+            { "filename", padding = { right = 1, left = 0 } },
           },
           lualine_x = {
             utils.python_venv,

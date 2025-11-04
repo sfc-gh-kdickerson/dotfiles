@@ -70,18 +70,18 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 # path
-addToPath() {
+prependToPath() {
     PATH="$1:$PATH"
 }
-addToPath "/opt/homebrew/bin"
-addToPath "/opt/homebrew/opt/libpq/bin"
-addToPath "/Users/kaleb/Library/Application Support/Coursier/bin"
-addToPath "/Users/kaleb/go/bin"
-addToPath "$HOME/.jenv/bin"
-addToPath "/usr/local/opt/llvm/bin"
-addToPath "$HOME/miniconda3/bin"
-addToPath "$HOME/.cargo/bin:$PATH"
-addToPath "$HOME/.nix-profile/bin"
+appendToPath() {
+    PATH="$PATH:$1"
+}
+# order will be nix, homebrew, rust, go, normal, conda
+prependToPath "$HOME/go/bin"
+prependToPath "$HOME/.cargo/bin:$PATH"
+prependToPath "/opt/homebrew/bin"
+prependToPath "$HOME/.nix-profile/bin"
+appendToPath "$HOME/miniconda3/bin"
 
 # exports
 export FZF_TMUX_OPTS='-p80%,60%'
