@@ -80,6 +80,7 @@ addToPath "/Users/kaleb/go/bin"
 addToPath "$HOME/.jenv/bin"
 addToPath "/usr/local/opt/llvm/bin"
 addToPath "$HOME/miniconda3/bin"
+addToPath "$HOME/.cargo/bin:$PATH"
 addToPath "$HOME/.nix-profile/bin"
 
 # exports

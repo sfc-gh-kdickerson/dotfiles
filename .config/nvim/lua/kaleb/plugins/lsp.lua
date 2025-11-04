@@ -56,7 +56,7 @@ return {
     config = function()
       --- @diagnostic disable-next-line: missing-fields
       require("mason-lspconfig").setup({
-        ensure_installed = lsps,
+        -- ensure_installed = lsps,
       })
     end,
   },
