@@ -18,15 +18,33 @@ return {
     priority = 1000,
     config = function()
       require("catppuccin").setup({
+        auto_integrations = true,
         transparent_background = true,
         custom_highlights = function(colors)
           return {
             ["@keyword.operator"] = { fg = colors.mauve },
           }
         end,
+        styles = { -- Handles the styles of general hi groups (see `:h highlight-args`):
+          comments = { "italic" }, -- Change the style of comments
+          conditionals = { "italic" },
+          loops = {},
+          functions = { "italic" },
+          keywords = {},
+          strings = {},
+          variables = {},
+          numbers = {},
+          booleans = {},
+          properties = {},
+          types = { "bold" },
+          operators = {},
+        },
+        float = {
+          transparent = true, -- Make floating windows transparent (if not overridden by NormalFloat)
+          solid = false,    -- Use a solid background for floating windows
+        },
       })
       vim.cmd("colorscheme " .. COLORSCHEME)
     end,
   },
-  -- { "j-hui/fidget.nvim", event = "LspAttach", opts = { notification = { window = { winblend = 0 } } } }, -- lsp progress messages
 }

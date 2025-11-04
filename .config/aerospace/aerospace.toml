@@ -77,6 +77,10 @@ alt-t = 'layout floating tiling'
 alt-shift-minus = 'resize smart -50'
 alt-shift-equal = 'resize smart +50'
 alt-r = 'mode resize'
+
+# app keybinds
+alt-g = ["exec-and-forget open -a 'Ghostty'"]
+
 [mode.resize.binding]
 h = 'resize width -50'
 j = 'resize height +50'

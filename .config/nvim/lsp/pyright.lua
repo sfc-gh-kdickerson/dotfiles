@@ -10,6 +10,10 @@ return {
         diagnosticMode = "openFilesOnly", -- openFilesOnly, workspace
         useLibraryCodeForTypes = true,
         reportMatchNotExhaustive = true,
+        exclude = {
+          ".github",
+          ".git",
+        }
       },
     },
   },

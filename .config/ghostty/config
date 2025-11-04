@@ -1,4 +1,6 @@
 font-family = "Jetbrains Mono"
+background = 000000
+background-opacity = 0.70
 macos-titlebar-style = "hidden"
 font-size=12
 theme=Catppuccin Mocha
