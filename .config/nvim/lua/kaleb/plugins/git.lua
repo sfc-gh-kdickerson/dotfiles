@@ -65,7 +65,7 @@ return {
     dependencies = { "nvim-lua/plenary.nvim", "sindrets/diffview.nvim", "folke/snacks.nvim" },
     config = function()
       require("neogit").setup({
-        kind = "split_below_all",
+        kind = "floating_console",
         integrations = {
           diffview = true,
         },
