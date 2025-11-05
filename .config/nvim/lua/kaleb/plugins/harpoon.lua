@@ -8,7 +8,7 @@ return {
       harpoon:setup()
 
       vim.keymap.set("n", "<leader>ha", function()
-        local filename = vim.fn.expand("%:p")
+        local filename = vim.fn.expand("%:t")
         local new_file_index = harpoon:list():length() + 1
         vim.notify(
           "Adding " .. filename .. " to harpoon at index " .. new_file_index,
@@ -19,7 +19,7 @@ return {
       end, { desc = "Add File to Harpoon" })
 
       vim.keymap.set("n", "<leader>he", function()
-        local filename = vim.fn.expand("%:p")
+        local filename = vim.fn.expand("%:t")
         vim.notify("Erasing " .. filename .. " from harpoon", vim.log.levels.INFO, { title = "Harpoon" })
         harpoon:list():remove()
       end, { desc = "Erase File From Harpoon" })
