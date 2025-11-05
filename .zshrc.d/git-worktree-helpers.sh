@@ -1,82 +1,82 @@
 #!/bin/sh
+
 # git worktree switch
 function gwts() {
-  # Check if we are inside a tmux session
-  if [[ -n "$TMUX" ]]; then
-    local target_worktree=$(git worktree list | awk '{print $1}' | fzf)
+  local branch_name="$1"
+  local target_worktree=""
+  local worktree_list=""
 
+  # 1. Ensure we are inside a Git repository
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not inside a Git repository or worktree. Aborting."
+    return 1
+  fi
+
+  # Get the full list of worktrees (Path, Commit, Branch)
+  worktree_list=$(git worktree list)
+
+  if [[ -n "$branch_name" ]]; then
+    # 2. Check if a worktree exists for the given branch name
+    # We use 'grep' to find the line containing the branch name, 
+    # then 'awk' to extract the path (the first column).
+    # We use \b to ensure it's a whole word match for the branch name.
+    target_worktree=$(echo "$worktree_list" | grep -E "\b${branch_name}\b" | awk '{print $1}')
+    
     if [[ -z "$target_worktree" ]]; then
+      echo "Branch '$branch_name' is not currently checked out in a worktree."
+      echo "Continuing to interactive selection..."
+    fi
+  fi
+
+  # 3. Fallback to fzf if no branch name was provided or no matching worktree was found
+  if [[ -z "$target_worktree" ]]; then
+    # Use fzf on the full list for selection
+    local selected_line
+    selected_line=$(echo "$worktree_list" | fzf)
+
+    if [[ -z "$selected_line" ]]; then
       echo "No worktree selected. Aborting."
       return 1
     fi
-
-    local git_toplevel=$(git rev-parse --show-toplevel)
-    local current_window=$(tmux list-windows -F "#{window_id} #{window_active}" | awk '$2=="1" {print $1}')
-
-    tmux list-panes -t "$current_window" -F "#{pane_id}" | while read -r pane_id; do
-      # Get the current path of the pane
-      local pane_path=$(tmux display-message -t "$pane_id" -p '#{pane_current_path}')
-
-      # Calculate the relative path from the git root
-      local relative_path=${pane_path##$git_toplevel}
-
-      # If the pane is inside the git repository, construct the new path
-      if [[ "$pane_path" == "$git_toplevel"* ]]; then
-        local new_path="${target_worktree}${relative_path}"
-        # Send the cd command to each pane
-        tmux send-keys -t "$pane_id" "cd $new_path && clear" C-m
-      else
-        echo "Pane $pane_id is not in a git worktree. Skipping."
-      fi
-    done
-  else
-    echo "This command only works inside a tmux session."
+    
+    # Extract the path from the selected line (always the first column)
+    target_worktree=$(echo "$selected_line" | awk '{print $1}')
+    
+    # Optional: Extract branch name for the success message
+    branch_name=$(echo "$selected_line" | awk '{print $NF}' | tr -d '[]()')
   fi
+
+  # 4. Change the directory of the current shell
+  # We use the built-in 'cd' command to ensure the shell's directory is changed.
+  cd "$target_worktree" && clear
 }
 
-function gcwt() {
-  # Check if we are in a git repository at all
-  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Error: Not in a git repository. Exiting."
+# git worktree create branch, new tmux window, and cd into it
+function gwtcb() {
+  if [ -z "$1" ]; then
+    echo "Usage: gwtcb <new-branch-name>"
     return 1
   fi
 
-  # Check if the current directory is the repository root
-  local git_root=$(git rev-parse --show-toplevel)
-  local current_dir=$(pwd)
-
-  if [ "$git_root" != "$current_dir" ]; then
-    echo "Error: Not in the root directory of the git repository. Exiting."
+  local branch_name="$1"
+  local worktree_path="../${branch_name}" # Adjust this path as needed
+  
+  # 1. Create the worktree and new branch
+  echo "Creating new worktree at ${worktree_path} and branch ${branch_name}..."
+  if ! git worktree add -b "${branch_name}" "${worktree_path}"; then
+    echo "Error creating git worktree and branch. Aborting."
     return 1
   fi
-
-  # Use fzf to let the user select a branch
-  local branch_name=$(git branch --all | grep -v 'HEAD' | sed 's/  *//' | fzf --prompt="Select a branch to create a new worktree from: ")
-
-  # Validate that the input is not empty
-  if [ -z "$branch_name" ]; then
-    echo "No branch selected. Exiting."
-    return 1
-  fi
-
-  # Define the full path for the new worktree one level up
-  local new_worktree_path="../${branch_name}"
-
-  # Check if a directory with the same name already exists
-  if [ -d "${new_worktree_path}" ]; then
-    echo "Error: A directory named '${new_worktree_path}' already exists. Exiting."
-    return 1
-  fi
-
-  # Create the new worktree and branch
-  echo "Creating new worktree in '${new_worktree_path}' for branch '$branch_name'..."
-  git worktree add "${new_worktree_path}" "$branch_name"
-
-  # Check if the command was successful and provide feedback
-  if [ $? -eq 0 ]; then
-    echo "Successfully created worktree in '${new_worktree_path}' with branch '$branch_name'."
+  
+  # 2. Create a new tmux window and change directory
+  if command -v tmux &> /dev/null; then
+    echo "Creating new tmux window '${branch_name}' and navigating to worktree..."
+    # 'new-window' creates a new window
+    # '-n' sets the window name
+    # '-c' sets the starting directory for the new window
+    tmux new-window -n "${branch_name}" -c "${worktree_path}"
   else
-    echo "Failed to create worktree."
-    return 1
+    echo "tmux is not installed or not in PATH. Worktree created, but no new window opened."
+    echo "Worktree location: ${worktree_path}"
   fi
 }
