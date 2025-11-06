@@ -10,26 +10,26 @@ return {
   { "echasnovski/mini.comment", version = "*", event = "VeryLazy", opts = {} },
   { "echasnovski/mini.cursorword", version = "*", event = "VeryLazy", opts = {} },
   { "echasnovski/mini.icons", version = "*", event = "VeryLazy", opts = {} },
-  -- {
-  --   "echasnovski/mini.sessions",
-  --   version = "*",
-  --   priority = 1000,
-  --   opts = {
-  --     autoread = true,
-  --     directory = "",
-  --     file = ".nvim/default_session.vim",
-  --     hooks = {
-  --       post = {
-  --         -- needed because lsp is loaded after bufopen event is fired
-  --         read = function()
-  --           vim.defer_fn(function()
-  --             vim.cmd("LspStart")
-  --           end, 1000)
-  --         end,
-  --       },
-  --     },
-  --   },
-  -- },
+  {
+    "echasnovski/mini.sessions",
+    version = "*",
+    priority = 1000,
+    opts = {
+      autoread = true,
+      directory = "",
+      file = ".nvim/default_session.vim",
+      hooks = {
+        post = {
+          -- needed because lsp is loaded after bufopen event is fired
+          read = function()
+            vim.defer_fn(function()
+              vim.cmd("LspStart")
+            end, 1000)
+          end,
+        },
+      },
+    },
+  },
   {
     "echasnovski/mini.pairs",
     enabled = true,
