@@ -65,8 +65,8 @@ vim.api.nvim_create_user_command("NewSession", function()
 end, { desc = "Creates new session in .nvim directory from cwd" })
 
 vim.api.nvim_create_user_command("Git", function()
-  -- require("neogit").open({kind = "replace"})
-  require("neogit").open()
+  require("neogit").open({kind = "replace"})
+  -- require("neogit").open()
   local current_buf = vim.api.nvim_get_current_buf()
   local bufs = vim.api.nvim_list_bufs()
   for _, buf in ipairs(bufs) do
