@@ -51,7 +51,7 @@ return {
       notification = {
         window = {
           winblend = 0,
-          align = "top",
+          align = "bottom",
         },
         override_vim_notify = true,
       },
