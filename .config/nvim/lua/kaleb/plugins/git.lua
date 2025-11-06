@@ -62,10 +62,10 @@ return {
     -- stylua: ignore start
     keys = { { "<leader>gs", function() require("neogit").open() end, desc = "Open Neogit" } },
     -- stylua: ignore end
-    dependencies = { "nvim-lua/plenary.nvim", "sindrets/diffview.nvim" },
+    dependencies = { "nvim-lua/plenary.nvim", "sindrets/diffview.nvim", "folke/snacks.nvim" },
     config = function()
       require("neogit").setup({
-        kind = "auto",
+        kind = "floating_console",
         integrations = {
           diffview = true,
         },
@@ -85,6 +85,7 @@ return {
           spell_check = true,
         },
         process_spinner = true,
+        graph_style = "kitty",
       })
       vim.api.nvim_create_autocmd({ "User" }, {
         pattern = {

@@ -5,3 +5,4 @@
 .zshrc.d/work.sh
 
 **/flake.lock
+.nvim/
