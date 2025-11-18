@@ -13,7 +13,13 @@ return {
         exclude = {
           ".github",
           ".git",
-        }
+        },
+        inlayHints = {
+          variableTypes = true,
+          functionReturnTypes = true,
+          parameterNames = true,
+          callArgumentTypes = true,
+        },
       },
     },
   },

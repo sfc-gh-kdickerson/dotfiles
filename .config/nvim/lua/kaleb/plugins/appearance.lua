@@ -41,7 +41,19 @@ return {
         },
         float = {
           transparent = true, -- Make floating windows transparent (if not overridden by NormalFloat)
-          solid = false,    -- Use a solid background for floating windows
+          solid = false, -- Use a solid background for floating windows
+        },
+        integrations = {
+          dropbar = {
+            enabled = false,
+            color_mode = false, -- enable color for kind's texts, not just kind's icons
+          },
+          fidget = true,
+          harpoon = true,
+          snacks = {
+            enabled = true,
+            indent_scope_color = "lavender",
+          },
         },
       })
       vim.cmd("colorscheme " .. COLORSCHEME)
