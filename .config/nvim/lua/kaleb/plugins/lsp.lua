@@ -17,7 +17,13 @@ local lsp_attach_group = vim.api.nvim_create_augroup("LspAttachConfig", { clear 
 vim.api.nvim_create_autocmd("LspAttach", {
   group = lsp_attach_group,
   callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
     local bufnr = args.buf
+
+    if client and client.server_capabilities.inlayHintProvider then
+      vim.lsp.inlay_hint.enable(true, {bufnr = bufnr})
+    end
+
     -- stylua: ignore start
     vim.keymap.set("n", "K", vim.lsp.buf.hover, { buffer = bufnr, desc = "Hover" })
     vim.keymap.set("n", "<leader>cf", function() vim.lsp.buf.format({ async = false, timeout_ms = 10000 }) end, { buffer = bufnr, desc = "Format Code" })
@@ -31,6 +37,7 @@ vim.lsp.config("*", {
   capabilities = {
     textDocument = {
       semanticTokens = {
+        enabled = true,
         multilineTokenSupport = true,
       },
       completion = {

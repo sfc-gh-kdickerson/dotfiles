@@ -25,7 +25,7 @@ return {
         sections = {
           lualine_a = { "mode" },
           lualine_b = {
-            "branch",
+            -- "branch",
             { "harpoon2", icon = "", padding = { left = 0, right = 1 } },
             "diff",
             "diagnostics",
@@ -47,7 +47,7 @@ return {
 
           lualine_y = {
             "kulala",
-            "lsp_status",
+            -- "lsp_status",
             "progress",
           },
           lualine_z = { "location" },
