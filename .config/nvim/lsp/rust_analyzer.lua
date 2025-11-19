@@ -1,5 +1,11 @@
 return {
   settings = {
+    ["rust-analyzer"] = {
+      checkOnSave = {
+        enable = true,
+        command = "clippy",
+      },
+    },
     inlayHints = {
       lifetimeElisionHints = {
         enable = true,
