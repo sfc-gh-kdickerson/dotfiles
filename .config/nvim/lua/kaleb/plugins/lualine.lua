@@ -5,7 +5,7 @@ vim.opt.cmdheight = 0
 return {
   {
     "nvim-lualine/lualine.nvim",
-    enabled = true,
+    enabled = false,
     event = "BufReadPre",
     dependencies = {
       {

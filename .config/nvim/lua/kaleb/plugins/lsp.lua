@@ -21,7 +21,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     local bufnr = args.buf
 
     if client and client.server_capabilities.inlayHintProvider then
-      vim.lsp.inlay_hint.enable(true, {bufnr = bufnr})
+      vim.lsp.inlay_hint.enable(false, {bufnr = bufnr})
     end
 
     -- stylua: ignore start

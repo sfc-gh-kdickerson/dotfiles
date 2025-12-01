@@ -16,10 +16,11 @@ return {
     name = "catppuccin",
     lazy = false,
     priority = 1000,
+    enabled = COLORSCHEME:find("catppuccin"),
     config = function()
       require("catppuccin").setup({
         auto_integrations = true,
-        transparent_background = true,
+        -- transparent_background = true,
         custom_highlights = function(colors)
           return {
             ["@keyword.operator"] = { fg = colors.mauve },
@@ -55,6 +56,20 @@ return {
             indent_scope_color = "lavender",
           },
         },
+      })
+      vim.cmd("colorscheme " .. COLORSCHEME)
+    end,
+  },
+  {
+    "folke/tokyonight.nvim",
+    lazy = false,
+    priority = 1000,
+    enabled = COLORSCHEME:find("tokyonight"),
+    config = function()
+      require("tokyonight").setup({
+        style = "storm",
+        transparent = false,
+        dim_inactive = true, -- dims inactive windows
       })
       vim.cmd("colorscheme " .. COLORSCHEME)
     end,

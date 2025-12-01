@@ -25,7 +25,7 @@ outer.top = [
     { monitor."DELL S2721Q"    = 45 },
     { monitor."DELL P2723DE"   = 40 }, 
     { monitor."LS34A650U"      = 40 }, 
-    { monitor."^Built-in.*"    = 10 }, # built-in display (MacBook screen) 
+    { monitor."^Built-in.*"    = 8  }, # built-in display (MacBook screen) 
     { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
     0                                  # should be unreachable but satisfies syntax
 ]

@@ -2,6 +2,8 @@
 
 sketchybar --add event aerospace_workspace_change
 
+COLOR="$THM_PEACH"
+
 for sid in $(aerospace list-workspaces --all); do
     sketchybar --add item space.$sid left \
         --subscribe space.$sid aerospace_workspace_change \
@@ -11,8 +13,10 @@ for sid in $(aerospace list-workspaces --all); do
         background.height=20 \
 	    background.color="$ITEM_BG_COLOR" \
         background.drawing=on \
+        background.border_width="$BORDER_WIDTH" \
+        background.border_color="$COLOR" \
         label="$sid" \
-        label.color="$THM_PEACH"\
+        label.color="$COLOR"\
         click_script="aerospace workspace $sid" \
         script="$PLUGIN_DIR/aerospace.sh $sid" \
         icon.padding_right=0 \
