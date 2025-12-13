@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-COLOR="$THM_GREEN"
+COLOR="$THM_TEXT"
 
 sketchybar --add item seperator left \
 	--set seperator update_freq=1 \
-	icon.padding_left=10 \
+	icon.padding_left="$LEFT_ITEM_PADDING_LEFT" \
 	icon.color="$COLOR" \
 	icon="" \
 	label.color="$COLOR" \
@@ -23,6 +23,6 @@ sketchybar \
 	background.color="$ITEM_BG_COLOR" \
 	label.color="$COLOR" \
 	label.padding_left=$LEFT_ITEM_PADDING_LEFT \
-	label.padding_right=8 \
+	label.padding_right=0 \
 	associated_display=active \
 	--subscribe front_app front_app_switched

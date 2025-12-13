@@ -19,6 +19,11 @@ return {
     enabled = COLORSCHEME:find("catppuccin"),
     config = function()
       require("catppuccin").setup({
+        dim_inactive = {
+          enabled = true, -- dims the background color of inactive window
+          shade = "dark",
+          percentage = 0.15, -- percentage of the shade to apply to the inactive window
+        },
         auto_integrations = true,
         -- transparent_background = true,
         custom_highlights = function(colors)
