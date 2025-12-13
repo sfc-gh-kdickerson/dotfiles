@@ -4,7 +4,7 @@ local lsps = {
   "lua_ls",
   "bashls",
   "jsonls",
-  "pyright",
+  -- "pyright",
   "yamlls",
   "jdtls",
   "zls",

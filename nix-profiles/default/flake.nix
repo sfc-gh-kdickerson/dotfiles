@@ -15,7 +15,6 @@
             atuin
             bash
             bat
-            cargo
             delta
             direnv
             eza
