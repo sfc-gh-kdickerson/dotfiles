@@ -19,7 +19,7 @@ class Event:
         delta = self.start_time - now
         delta_min = math.ceil(delta.total_seconds() / 60)
         if delta_min > 30:
-            return f"At {self.start_time.strftime("%I:%M %p")}: {self.title}"
+            return f"At {self.start_time.strftime('%I:%M %p')}: {self.title}"
         else:
             return f"In {delta_min} min: {self.title}"
 
@@ -35,7 +35,7 @@ def get_todays_events(calendars: list[str]) -> list[Event]:
     """Gets all events for the day for the specified calendars (excludes all day events)
     """
     seperator = "###"
-    pattern = rf"({"|".join(calendars)}):{seperator}"
+    pattern = rf"({'|'.join(calendars)}):{seperator}"
     script = f"icalbuddy -ea -sc -eep notes,location,attendees -ps '{seperator}' -ss {seperator} eventsToday"
     current_date = datetime.now().date()
     try:
