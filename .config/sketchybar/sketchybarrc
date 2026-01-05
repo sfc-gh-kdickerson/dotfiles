@@ -33,9 +33,13 @@ sketchybar --bar height=30 \
     background.border_color="$THM_ROSEWATER"
 
 # Left
-# source "$ITEM_DIR/apple.sh"
 source "$ITEM_DIR/spaces.sh"
 source "$ITEM_DIR/front_app.sh"
+
+# sketchybar --add bracket spaces '/space\..*/' seperator front_app \
+#            --set spaces background.color="$THM_SURFACE_0" \
+#                  background.corner_radius=4  \
+#                  background.height=30 
 
 # Right
 source "$ITEM_DIR/clock.sh"
@@ -44,7 +48,14 @@ source "$ITEM_DIR/volume.sh"
 source "$ITEM_DIR/battery.sh"
 source "$ITEM_DIR/ram.sh"
 source "$ITEM_DIR/cpu.sh"
-# source "$ITEM_DIR/spotify.sh"
+source "$ITEM_DIR/events.sh"
+source "$ITEM_DIR/vpn.sh"
+
+# sketchybar --add bracket utils clock calendar volume battery ram cpu calevent \
+#            --set utils background.color="$THM_SURFACE_0" \
+#                  background.corner_radius=4  \
+#                  background.height=30 \
+#                  background.border_color="$THM_SURFACE_1" \
 
 #################### Finalizing Setup ####################
 
