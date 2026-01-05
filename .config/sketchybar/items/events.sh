@@ -15,6 +15,7 @@ sketchybar --add item calevent right \
 	background.height=26 \
 	background.corner_radius="$CORNER_RADIUS" \
 	background.padding_right=5 \
+	background.padding_left=-12 \
 	background.border_width="$BORDER_WIDTH" \
 	background.border_color="$COLOR" \
 	background.drawing=on \

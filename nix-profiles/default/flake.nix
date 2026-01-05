@@ -46,7 +46,7 @@
 
         darwinPackages = with pkgs; [
             jankyborders
-            sketchybar
+            # sketchybar
         ];
 
         linuxPackages = with pkgs; [

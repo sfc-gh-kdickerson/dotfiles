@@ -123,7 +123,7 @@ else
     if [ -f "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh" ]; then
         . "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh"
     else
-        # export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
+        export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
     fi
 fi
 unset __conda_setup
