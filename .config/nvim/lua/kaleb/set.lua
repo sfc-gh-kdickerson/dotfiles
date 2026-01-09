@@ -24,6 +24,7 @@ vim.o.splitright = true
 -- Needed for Obisidian
 vim.opt.conceallevel = 1
 vim.o.winborder = "rounded"
+vim.opt.cmdheight = 0
 
 vim.diagnostic.config({
   virtual_text = true,

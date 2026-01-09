@@ -39,7 +39,7 @@ FONT="MesloLGS NF"
 
 # bar options
 BAR_BORDER_WIDTH=1
-BAR_CORNER_RADIUS=4
+BAR_CORNER_RADIUS=8
 
 # global item options
 CORNER_RADIUS=4
