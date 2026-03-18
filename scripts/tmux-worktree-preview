@@ -150,6 +150,10 @@ fi
 # --- Last commit message ---
 commit_msg=$(git -C "$path" log -1 --format='%s' 2>/dev/null || echo "")
 if [[ -n "$commit_msg" ]]; then
+    max=$(( cols - 6 ))
+    if (( ${#commit_msg} > max )); then
+        commit_msg="${commit_msg:0:max}…"
+    fi
     echo ""
     echo "  ${commit_msg}"
 fi
@@ -215,8 +219,15 @@ printf "  ${gray}%*s${reset}\n" $(( cols - 4 )) "" | tr ' ' '╌'
 echo ""
 echo "  ${gray}Recent commits${reset}"
 
-git -C "$path" log --oneline --no-decorate -15 2>/dev/null | while IFS= read -r line; do
-    echo "  ${line}"
+git -C "$path" log --format='%h%x09%s%x09%an' --no-decorate -15 2>/dev/null | while IFS=$'\t' read -r hash msg author; do
+    # Truncate message to fit: 2 indent + hash(~7) + space + msg + 2 spaces + author
+    author_len=${#author}
+    avail=$(( cols - 6 - ${#hash} - 1 - 2 - author_len ))
+    if (( avail < 10 )); then avail=10; fi
+    if (( ${#msg} > avail )); then
+        msg="${msg:0:avail}…"
+    fi
+    echo "  ${yellow}${hash}${reset} ${msg}  ${gray}${author}${reset}"
 done
 
 # --- Footer: path ---
