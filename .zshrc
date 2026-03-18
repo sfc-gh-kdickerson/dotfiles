@@ -77,6 +77,7 @@ appendToPath() {
 }
 # order will be nix, homebrew, rust, go, normal, conda
 prependToPath "$HOME/go/bin"
+prependToPath "$HOME/firstpass/bin"
 prependToPath "$HOME/.cargo/bin:$PATH"
 prependToPath "/opt/homebrew/bin"
 prependToPath "$HOME/.nix-profile/bin"
@@ -128,3 +129,20 @@ else
 fi
 unset __conda_setup
 # <<< conda initialize <<<
+
+# Added by the Cortex Code installer.
+export PATH="/Users/kdickerson/.local/bin:$PATH"
+
+alias coco="cortex"
+
+# Cortex CLI completion (disable via /settings in cortex)
+[[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
+
+# bun completions
+[ -s "/Users/kdickerson/.bun/_bun" ] && source "/Users/kdickerson/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi

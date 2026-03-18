@@ -85,6 +85,7 @@ alt-w = ["exec-and-forget open -a 'WezTerm'"]
 alt-m = ["exec-and-forget open -a 'Gmail'"]
 alt-c = ["exec-and-forget open -a 'Google Calendar'"]
 alt-b = ["exec-and-forget open -a 'Cursor'"]
+alt-ctrl-space = ['exec-and-forget open -a "Gemini"']
 
 [mode.resize.binding]
 h = 'resize width -50'
