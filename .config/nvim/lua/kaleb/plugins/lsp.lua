@@ -10,6 +10,7 @@ local lsps = {
   "zls",
   "rust_analyzer",
   "nil_ls",
+  "ts_ls"
 }
 vim.lsp.enable(lsps)
 

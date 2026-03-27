@@ -94,7 +94,7 @@ enter = 'mode main'
 esc = 'mode main'
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden)'
+if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|quicktime player)'
 run = ['layout floating']  
 
 [[on-window-detected]]
