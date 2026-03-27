@@ -86,6 +86,9 @@ if [[ -f "$status_file" ]]; then
         completed)
             echo "  ${green}"$'\uf00c'"${reset} ${bold}Claude done${reset} ${gray}${status_age}${reset}"
             ;;
+        plan_ready)
+            echo "  ${cyan}"$'\uf0ae'"${reset} ${bold}${cyan}Plan ready${reset} ${gray}${status_age}${reset}"
+            ;;
         question)
             echo "  ${yellow}"$'\uf059'"${reset} ${bold}${yellow}Needs input${reset} ${gray}${status_age}${reset}"
             ;;

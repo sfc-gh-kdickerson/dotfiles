@@ -90,7 +90,7 @@ fi
 
 # Build colored, sorted fzf input based on Claude status per worktree.
 # Status indicators (Nerd Font):  permission (magenta),  question (yellow),
-#  attention (yellow),  completed (green),  working (blue), no prefix = no session.
+#  attention (yellow),  plan ready (cyan),  completed (green),  working (blue), no prefix = no session.
 # PR badges: #NNN right-aligned, colored by state.
 build_fzf_input() {
     local target_width=50
@@ -105,6 +105,7 @@ build_fzf_input() {
             permission)         prefix=$'\033[35m\uf023 '; priority=1 ;;
             question)           prefix=$'\033[33m\uf059 '; priority=1 ;;
             attention)          prefix=$'\033[33m\uf06a '; priority=1 ;;
+            plan_ready)         prefix=$'\033[36m\uf0ae '; priority=1 ;;
             completed)          prefix=$'\033[32m\uf00c '; priority=2 ;;
             working)            prefix=$'\033[34m\uf021 '; priority=3 ;;
         esac

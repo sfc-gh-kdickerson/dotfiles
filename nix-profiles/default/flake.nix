@@ -28,7 +28,6 @@
             jq
             lazygit
             neovim
-            nodejs_22
             prettier
             ripgrep
             stow
