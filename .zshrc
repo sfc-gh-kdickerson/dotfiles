@@ -23,6 +23,7 @@ zinit ice depth"1" lucid; zinit light romkatv/powerlevel10k
 zinit light zsh-users/zsh-syntax-highlighting
 zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
+fpath+=~/.zsh/completions
 autoload -Uz compinit
 compinit -D
 zinit ice wait"1" lucid; zinit light Aloxaf/fzf-tab

@@ -24,7 +24,7 @@ return {
           border = "rounded",
         },
       })
-      -- vim.api.nvim_create_user_command("Blame", require("gitsigns.blame").blame, {})
+      vim.api.nvim_create_user_command("Blame", "Gitsigns blame<CR>", {})
     end,
   },
   {
@@ -65,9 +65,10 @@ return {
     dependencies = { "nvim-lua/plenary.nvim", "sindrets/diffview.nvim", "folke/snacks.nvim" },
     config = function()
       require("neogit").setup({
-        kind = "floating_console",
+        kind = "floating",
         integrations = {
           diffview = true,
+          snacks = true,
         },
         signs = {
           -- { CLOSED, OPENED }
@@ -86,6 +87,12 @@ return {
         },
         process_spinner = true,
         graph_style = "kitty",
+        sections = {
+          untracked = {
+            folded = true,
+            hidden = false,
+          },
+        }
       })
       vim.api.nvim_create_autocmd({ "User" }, {
         pattern = {

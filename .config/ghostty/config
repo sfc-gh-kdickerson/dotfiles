@@ -6,4 +6,3 @@ adjust-cell-height=-2
 font-feature=-calt
 custom-shader = shaders/ripple_cursor.glsl
 custom-shader = shaders/cursor_warp.glsl
-command = $HOME/.nix-profile/bin/tmux attach

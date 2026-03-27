@@ -80,6 +80,10 @@ alt-r = 'mode resize'
 
 # app keybinds
 alt-g = ["exec-and-forget open -a 'Ghostty'"]
+alt-w = ["exec-and-forget open -a 'WezTerm'"]
+alt-m = ["exec-and-forget open -a 'Gmail'"]
+alt-c = ["exec-and-forget open -a 'Google Calendar'"]
+alt-b = ["exec-and-forget open -a 'Cursor'"]
 
 [mode.resize.binding]
 h = 'resize width -50'

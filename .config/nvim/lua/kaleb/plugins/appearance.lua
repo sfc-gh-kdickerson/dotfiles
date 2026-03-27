@@ -20,15 +20,17 @@ return {
     config = function()
       require("catppuccin").setup({
         dim_inactive = {
-          enabled = true, -- dims the background color of inactive window
+          enabled = false, -- dims the background color of inactive window
           shade = "dark",
           percentage = 0.15, -- percentage of the shade to apply to the inactive window
         },
         auto_integrations = true,
-        -- transparent_background = true,
+        transparent_background = true,
         custom_highlights = function(colors)
           return {
             ["@keyword.operator"] = { fg = colors.mauve },
+            NormalNC = { bg = colors.crust },
+            WinBarNC = { bg = colors.crust },
           }
         end,
         styles = { -- Handles the styles of general hi groups (see `:h highlight-args`):
