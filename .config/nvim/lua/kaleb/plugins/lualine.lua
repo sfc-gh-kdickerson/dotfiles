@@ -4,7 +4,7 @@ vim.opt.laststatus = 0
 return {
   {
     "nvim-lualine/lualine.nvim",
-    enabled = false,
+    enabled = true,
     event = "BufReadPre",
     dependencies = {
       {

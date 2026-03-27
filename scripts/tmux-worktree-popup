@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Tmux worktree popup — fzf picker over git worktrees with tmux window management.
+# Bound to C-m in tmux.
+#
+# Uses git worktree list --porcelain (~30ms) + fzf for the picker instead of
+# wt switch's built-in picker (seconds in large repos). Delegates to
+# wt switch <branch> --no-cd for the actual worktree creation/switching.
+
+# Parse git worktree list --porcelain into branch\tpath lines.
+parse_worktrees() {
+    local cur_path=""
+    while IFS= read -r line; do
+        case "$line" in
+            "worktree "*)  cur_path="${line#worktree }" ;;
+            "branch refs/heads/"*)
+                echo "${line#branch refs/heads/}	$cur_path"
+                ;;
+            "") cur_path="" ;;
+        esac
+    done < <(git worktree list --porcelain 2>/dev/null)
+}
+
+# Look up path for a branch in tab-separated worktree data
+path_for_branch() {
+    echo "$1" | awk -F'\t' -v b="$2" '$1 == b { print $2; exit }'
+}
+
+# Find tmux window with any pane inside the given path.
+# Checks all panes in the session; prefix-matches so subdirs count.
+find_window_by_path() {
+    local target="$1" result=""
+    while read -r idx wpath; do
+        if [[ "$wpath" == "$target" || "$wpath" == "$target/"* ]]; then
+            result="$idx"
+            break
+        fi
+    done < <(tmux list-panes -s -F '#{window_index} #{pane_current_path}' 2>/dev/null)
+    echo "$result"
+}
+
+# --- PR cache system ---
+
+# Returns cache file path based on origin remote URL.
+pr_cache_file() {
+    local origin_url
+    origin_url=$(git remote get-url origin 2>/dev/null) || return 1
+    local hash
+    hash=$(printf '%s' "$origin_url" | md5 2>/dev/null || printf '%s' "$origin_url" | md5sum 2>/dev/null | cut -d' ' -f1)
+    echo "/tmp/gh-pr-cache-${hash}"
+}
+
+# Refresh PR cache if stale (>60s) or missing. Never blocks — spawns background job.
+refresh_pr_cache() {
+    local cache
+    cache=$(pr_cache_file) || return 0
+    local now
+    now=$(date +%s)
+    if [[ -f "$cache" ]]; then
+        local mtime
+        mtime=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null || echo 0)
+        if (( now - mtime < 60 )); then
+            return 0
+        fi
+    fi
+    # Background: fetch PR list, write atomically
+    (
+        gh pr list --state all --json number,headRefName,state,isDraft --limit 100 \
+            --jq '.[] | [.headRefName, .number, .state, .isDraft] | @tsv' \
+            > "${cache}.tmp" 2>/dev/null \
+        && mv "${cache}.tmp" "$cache"
+    ) &
+    disown 2>/dev/null
+}
+
+# Look up PR info for a branch. Returns "number\tstate\tisDraft" or empty.
+lookup_pr() {
+    local branch="$1" cache
+    cache=$(pr_cache_file) || return 0
+    [[ -f "$cache" ]] || return 0
+    awk -F'\t' -v b="$branch" '$1 == b { print $2 "\t" $3 "\t" $4; exit }' "$cache"
+}
+
+BEFORE=$(parse_worktrees)
+
+# Kick off PR cache refresh (non-blocking)
+refresh_pr_cache
+
+# Cache worktree data for the preview script
+WTDIR=$(mktemp -d)
+trap 'rm -rf "$WTDIR"' EXIT
+echo "$BEFORE" > "$WTDIR/worktrees"
+
+# Symlink PR cache into WTDIR so preview script can find it
+pr_cache=$(pr_cache_file 2>/dev/null) || pr_cache=""
+if [[ -n "$pr_cache" ]]; then
+    ln -sf "$pr_cache" "$WTDIR/pr_cache"
+fi
+
+# Build colored, sorted fzf input based on Claude status per worktree.
+# Status indicators (Nerd Font):  permission (magenta),  question (yellow),
+#  attention (yellow),  completed (green),  working (blue), no prefix = no session.
+# PR badges: #NNN right-aligned, colored by state.
+build_fzf_input() {
+    local target_width=50
+    while IFS=$'\t' read -r branch path; do
+        [[ -z "$branch" ]] && continue
+        local status="" priority=4 prefix="  "
+        local status_file="$path/.claude/status.json"
+        if [[ -f "$status_file" ]]; then
+            status=$(jq -r '.status // empty' "$status_file" 2>/dev/null)
+        fi
+        case "$status" in
+            permission)         prefix=$'\033[35m\uf023 '; priority=1 ;;
+            question)           prefix=$'\033[33m\uf059 '; priority=1 ;;
+            attention)          prefix=$'\033[33m\uf06a '; priority=1 ;;
+            completed)          prefix=$'\033[32m\uf00c '; priority=2 ;;
+            working)            prefix=$'\033[34m\uf021 '; priority=3 ;;
+        esac
+
+        # PR badge
+        local pr_info pr_badge=""
+        pr_info=$(lookup_pr "$branch")
+        if [[ -n "$pr_info" ]]; then
+            local pr_num pr_state pr_draft
+            IFS=$'\t' read -r pr_num pr_state pr_draft <<< "$pr_info"
+            local pr_color=""
+            if [[ "$pr_state" == "MERGED" ]]; then
+                pr_color=$'\033[35m'
+            elif [[ "$pr_state" == "CLOSED" ]]; then
+                pr_color=$'\033[31m'
+            elif [[ "$pr_draft" == "true" ]]; then
+                pr_color=$'\033[90m'
+            else
+                pr_color=$'\033[32m'
+            fi
+            pr_badge="${pr_color}#${pr_num}"$'\033[0m'
+        fi
+
+        if [[ -n "$pr_badge" ]]; then
+            # Pad between branch name and right-aligned PR badge
+            local visible_len=$(( 2 + ${#branch} ))
+            local badge_visible_len=$(( 1 + ${#pr_num} ))  # "#" + digits
+            local pad_len=$(( target_width - visible_len - badge_visible_len ))
+            if (( pad_len < 2 )); then pad_len=2; fi
+            printf -v pad '%*s' "$pad_len" ""
+            printf '%d\t%s%s\033[0m%s%s\n' "$priority" "$prefix" "$branch" "$pad" "$pr_badge"
+        else
+            printf '%d\t%s%s\033[0m\n' "$priority" "$prefix" "$branch"
+        fi
+    done <<< "$BEFORE" | sort -t$'\t' -k1,1n | cut -f2
+}
+
+# Strip ANSI escape codes, status prefix, and trailing PR badge from fzf selection.
+strip_status_prefix() {
+    sed $'s/\033\[[0-9;]*m//g' | sed $'s/^[\uf023\uf059\uf06a\uf00c\uf021] //' | sed 's/^  //' | sed 's/   *#[0-9]*$//'
+}
+
+# fzf picker: branch names as items, custom preview.
+# --print-query: Enter with no match uses the query text to create a worktree.
+# --expect=ctrl-d: delete the selected worktree (with confirmation).
+result=$(build_fzf_input | command fzf \
+    --ansi \
+    --prompt="worktree> " \
+    --header="enter: switch (or create if no match) │ ctrl-d: remove" \
+    --preview="$HOME/scripts/tmux-worktree-preview {} $WTDIR/worktrees $WTDIR/pr_cache" \
+    --preview-window=right:60%,wrap \
+    --print-query \
+    --expect="ctrl-d" \
+    --no-multi \
+    --exit-0 \
+    2>/dev/null) || true
+
+# --print-query + --expect outputs three lines: query, key, selection
+query=$(echo "$result" | sed -n '1p')
+key=$(echo "$result" | sed -n '2p')
+selection=$(echo "$result" | sed -n '3p' | strip_status_prefix)
+
+if [[ "$key" == "ctrl-d" && -n "$selection" ]]; then
+    # Ctrl-d: remove selected worktree (with confirmation)
+    if command -v gum &>/dev/null; then
+        gum confirm "Remove worktree '$selection'?" || exit 0
+    else
+        printf "Remove worktree '%s'? [y/N]: " "$selection"
+        read -r answer
+        [[ "$answer" =~ ^[Yy]$ ]] || exit 0
+    fi
+    path=$(path_for_branch "$BEFORE" "$selection")
+    command wt remove --yes "$selection" 2>/dev/null || true
+    # Kill tmux window if it was pointing at the removed worktree
+    if [[ -n "$path" ]]; then
+        window_idx=$(find_window_by_path "$path")
+        if [[ -n "$window_idx" ]]; then
+            tmux kill-window -t "$window_idx"
+        fi
+    fi
+    exit 0
+fi
+
+# Enter: switch to selection, or create if no match
+branch="$selection"
+if [[ -z "$branch" ]]; then
+    # No match selected — use query text to create a new worktree
+    if [[ -z "$query" ]]; then
+        exit 0
+    fi
+    command wt switch --create --no-cd --yes "$query" 2>/dev/null || exit 0
+    AFTER=$(parse_worktrees)
+    path=$(path_for_branch "$AFTER" "$query")
+    if [[ -n "$path" ]]; then
+        tmux new-window -n "${query##*/}" -c "$path" "claude"
+    fi
+    exit 0
+fi
+
+path=$(path_for_branch "$BEFORE" "$branch")
+
+if [[ -z "$path" ]]; then
+    # Branch exists but no worktree yet — let wt create it
+    command wt switch --no-cd --yes "$branch" 2>/dev/null || exit 0
+    AFTER=$(parse_worktrees)
+    path=$(path_for_branch "$AFTER" "$branch")
+    if [[ -z "$path" ]]; then
+        exit 0
+    fi
+fi
+
+window_idx=$(find_window_by_path "$path")
+
+if [[ -n "$window_idx" ]]; then
+    tmux select-window -t "$window_idx"
+else
+    tmux new-window -n "${branch##*/}" -c "$path"
+fi
