@@ -9,9 +9,6 @@ branch="$1"
 wtfile="$2"
 pr_cache="${3:-}"
 
-# Strip ANSI codes, status prefix, and trailing PR badge
-branch=$(printf '%s' "$branch" | sed $'s/\033\[[0-9;]*m//g' | sed $'s/^[\uf023\uf059\uf06a\uf00c\uf021] //' | sed 's/^  //' | sed 's/   *#[0-9]*$//')
-
 # ANSI helpers
 bold=$'\033[1m'
 dim=$'\033[2m'
@@ -101,11 +98,11 @@ if [[ -f "$status_file" ]]; then
     esac
 fi
 
-# --- PR status (if cache available) ---
+# --- PR status (from cache, no network calls) ---
 if [[ -n "$pr_cache" && -f "$pr_cache" ]]; then
-    pr_info=$(awk -F'\t' -v b="$branch" '$1 == b { print $2 "\t" $3 "\t" $4; exit }' "$pr_cache")
-    if [[ -n "$pr_info" ]]; then
-        IFS=$'\t' read -r pr_num pr_state pr_draft <<< "$pr_info"
+    pr_line=$(awk -F'\t' -v b="$branch" '$1 == b { print; exit }' "$pr_cache")
+    if [[ -n "$pr_line" ]]; then
+        IFS=$'\t' read -r _branch pr_num pr_state pr_draft pr_title pr_review pr_ci <<< "$pr_line"
 
         # State display with color
         local_state=""
@@ -124,34 +121,27 @@ if [[ -n "$pr_cache" && -f "$pr_cache" ]]; then
         echo ""
         echo "  ${bold}PR #${pr_num}${reset} — ${local_state}"
 
-        # For open (non-draft) PRs, fetch title + review + CI status
-        if [[ "$pr_state" == "OPEN" && "$pr_draft" != "true" ]]; then
-            pr_detail=$(gh pr view "$pr_num" --json title,reviewDecision,statusCheckRollup \
-                --jq '[.title, .reviewDecision, ((.statusCheckRollup // []) | map(.conclusion) | if length == 0 then "PENDING" elif all(. == "SUCCESS") then "SUCCESS" elif any(. == "FAILURE") then "FAILURE" elif any(. == null) then "RUNNING" else "UNKNOWN" end)] | @tsv' 2>/dev/null) || pr_detail=""
-            if [[ -n "$pr_detail" ]]; then
-                IFS=$'\t' read -r pr_title pr_review pr_ci <<< "$pr_detail"
+        # Title + review + CI from cache
+        if [[ "$pr_state" == "OPEN" ]]; then
+            if [[ -n "$pr_title" ]]; then
+                echo "  ${dim}${pr_title}${reset}"
+            fi
 
-                if [[ -n "$pr_title" ]]; then
-                    echo "  ${dim}${pr_title}${reset}"
-                fi
-
-                # Review + CI on one line
-                review_badge="" ci_badge=""
-                case "$pr_review" in
-                    APPROVED)          review_badge="${green}✔ Approved${reset}" ;;
-                    CHANGES_REQUESTED) review_badge="${red}✘ Changes requested${reset}" ;;
-                    REVIEW_REQUIRED)   review_badge="${yellow}○ Review needed${reset}" ;;
-                    "")                review_badge="${gray}○ No reviews${reset}" ;;
-                esac
-                case "$pr_ci" in
-                    SUCCESS) ci_badge="${green}✔ CI pass${reset}" ;;
-                    FAILURE) ci_badge="${red}✘ CI fail${reset}" ;;
-                    RUNNING) ci_badge="${blue}⟳ CI running${reset}" ;;
-                    PENDING) ci_badge="${gray}○ CI pending${reset}" ;;
-                esac
-                if [[ -n "$review_badge" || -n "$ci_badge" ]]; then
-                    echo "  ${review_badge}    ${ci_badge}"
-                fi
+            review_badge="" ci_badge=""
+            case "$pr_review" in
+                APPROVED)          review_badge="${green}✔ Approved${reset}" ;;
+                CHANGES_REQUESTED) review_badge="${red}✘ Changes requested${reset}" ;;
+                REVIEW_REQUIRED)   review_badge="${yellow}○ Review needed${reset}" ;;
+                "")                review_badge="${gray}○ No reviews${reset}" ;;
+            esac
+            case "$pr_ci" in
+                SUCCESS) ci_badge="${green}✔ CI pass${reset}" ;;
+                FAILURE) ci_badge="${red}✘ CI fail${reset}" ;;
+                RUNNING) ci_badge="${blue}⟳ CI running${reset}" ;;
+                *)       ci_badge="${gray}○ CI pending${reset}" ;;
+            esac
+            if [[ -n "$review_badge" || -n "$ci_badge" ]]; then
+                echo "  ${review_badge}    ${ci_badge}"
             fi
         fi
     fi
