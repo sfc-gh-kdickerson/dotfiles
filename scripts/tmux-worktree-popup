@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Tmux worktree popup — fzf picker over git worktrees with tmux window management.
-# Bound to C-m in tmux.
+# Invoked as a tmux display-popup.
 #
 # Uses git worktree list --porcelain (~30ms) + fzf for the picker instead of
 # wt switch's built-in picker (seconds in large repos). Delegates to
@@ -22,24 +22,6 @@ parse_worktrees() {
     done < <(git worktree list --porcelain 2>/dev/null)
 }
 
-# Look up path for a branch in tab-separated worktree data
-path_for_branch() {
-    echo "$1" | awk -F'\t' -v b="$2" '$1 == b { print $2; exit }'
-}
-
-# Find tmux window with any pane inside the given path.
-# Checks all panes in the session; prefix-matches so subdirs count.
-find_window_by_path() {
-    local target="$1" result=""
-    while read -r idx wpath; do
-        if [[ "$wpath" == "$target" || "$wpath" == "$target/"* ]]; then
-            result="$idx"
-            break
-        fi
-    done < <(tmux list-panes -s -F '#{window_index} #{pane_current_path}' 2>/dev/null)
-    echo "$result"
-}
-
 # --- PR cache system ---
 
 # Returns cache file path based on origin remote URL.
@@ -51,7 +33,7 @@ pr_cache_file() {
     echo "/tmp/gh-pr-cache-${hash}"
 }
 
-# Refresh PR cache if stale (>60s) or missing. Never blocks — spawns background job.
+# Refresh PR cache if stale (>5min) or missing. Never blocks — spawns background job.
 refresh_pr_cache() {
     local cache
     cache=$(pr_cache_file) || return 0
@@ -60,14 +42,22 @@ refresh_pr_cache() {
     if [[ -f "$cache" ]]; then
         local mtime
         mtime=$(stat -f '%m' "$cache" 2>/dev/null || stat -c '%Y' "$cache" 2>/dev/null || echo 0)
-        if (( now - mtime < 60 )); then
+        if (( now - mtime < 300 )); then
             return 0
         fi
     fi
-    # Background: fetch PR list, write atomically
+    # Background: fetch PR list with detail fields, write atomically
     (
-        gh pr list --state all --json number,headRefName,state,isDraft --limit 100 \
-            --jq '.[] | [.headRefName, .number, .state, .isDraft] | @tsv' \
+        gh pr list --state all --limit 100 \
+            --json number,headRefName,state,isDraft,title,reviewDecision,statusCheckRollup \
+            --jq '.[] | [.headRefName, .number, .state, .isDraft, .title,
+                  (.reviewDecision // ""),
+                  ((.statusCheckRollup // []) | map(.conclusion) |
+                   if length == 0 then "PENDING"
+                   elif all(. == "SUCCESS") then "SUCCESS"
+                   elif any(. == "FAILURE") then "FAILURE"
+                   elif any(. == null) then "RUNNING"
+                   else "UNKNOWN" end)] | @tsv' \
             > "${cache}.tmp" 2>/dev/null \
         && mv "${cache}.tmp" "$cache"
     ) &
@@ -145,26 +135,25 @@ build_fzf_input() {
             local pad_len=$(( target_width - visible_len - badge_visible_len ))
             if (( pad_len < 2 )); then pad_len=2; fi
             printf -v pad '%*s' "$pad_len" ""
-            printf '%d\t%s%s\033[0m%s%s\n' "$priority" "$prefix" "$branch" "$pad" "$pr_badge"
+            printf '%d\t%s\t%s%s\033[0m%s%s\n' "$priority" "$branch" "$prefix" "$branch" "$pad" "$pr_badge"
         else
-            printf '%d\t%s%s\033[0m\n' "$priority" "$prefix" "$branch"
+            printf '%d\t%s\t%s%s\033[0m\n' "$priority" "$branch" "$prefix" "$branch"
         fi
-    done <<< "$BEFORE" | sort -t$'\t' -k1,1n | cut -f2
-}
-
-# Strip ANSI escape codes, status prefix, and trailing PR badge from fzf selection.
-strip_status_prefix() {
-    sed $'s/\033\[[0-9;]*m//g' | sed $'s/^[\uf023\uf059\uf06a\uf00c\uf021] //' | sed 's/^  //' | sed 's/   *#[0-9]*$//'
+    done <<< "$BEFORE" | sort -t$'\t' -k1,1n | cut -f2-
 }
 
 # fzf picker: branch names as items, custom preview.
 # --print-query: Enter with no match uses the query text to create a worktree.
 # --expect=ctrl-d: delete the selected worktree (with confirmation).
+# --with-nth=2..: display decorated text, field 1 is the clean branch name.
 result=$(build_fzf_input | command fzf \
     --ansi \
+    --delimiter=$'\t' \
+    --with-nth=2.. \
+    --nth=1 \
     --prompt="worktree> " \
     --header="enter: switch (or create if no match) │ ctrl-d: remove" \
-    --preview="$HOME/scripts/tmux-worktree-preview {} $WTDIR/worktrees $WTDIR/pr_cache" \
+    --preview="$HOME/scripts/tmux-worktree-preview {1} $WTDIR/worktrees $WTDIR/pr_cache" \
     --preview-window=right:60%,wrap \
     --print-query \
     --expect="ctrl-d" \
@@ -175,26 +164,30 @@ result=$(build_fzf_input | command fzf \
 # --print-query + --expect outputs three lines: query, key, selection
 query=$(echo "$result" | sed -n '1p')
 key=$(echo "$result" | sed -n '2p')
-selection=$(echo "$result" | sed -n '3p' | strip_status_prefix)
+selection=$(echo "$result" | sed -n '3p' | cut -f1)
 
 if [[ "$key" == "ctrl-d" && -n "$selection" ]]; then
-    # Ctrl-d: remove selected worktree (with confirmation)
-    if command -v gum &>/dev/null; then
-        gum confirm "Remove worktree '$selection'?" || exit 0
+    wt_path=$(awk -F'\t' -v b="$selection" '$1 == b { print $2; exit }' <<< "$BEFORE")
+
+    # Check for uncommitted changes
+    force=""
+    if [[ -n "$wt_path" ]] && [[ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]]; then
+        printf 'No\nYes, force remove' | command fzf \
+            --ansi --no-multi \
+            --prompt="'$selection' has uncommitted changes. Remove? > " \
+            --header="Worktree has uncommitted changes" \
+            2>/dev/null | grep -q '^Yes' || exit 0
+        force="--force"
     else
-        printf "Remove worktree '%s'? [y/N]: " "$selection"
-        read -r answer
-        [[ "$answer" =~ ^[Yy]$ ]] || exit 0
+        printf 'No\nYes' | command fzf \
+            --ansi --no-multi --prompt="Remove '$selection'? > " \
+            --header="Remove this worktree?" \
+            2>/dev/null | grep -q '^Yes$' || exit 0
     fi
-    path=$(path_for_branch "$BEFORE" "$selection")
-    command wt remove --yes "$selection" 2>/dev/null || true
-    # Kill tmux window if it was pointing at the removed worktree
-    if [[ -n "$path" ]]; then
-        window_idx=$(find_window_by_path "$path")
-        if [[ -n "$window_idx" ]]; then
-            tmux kill-window -t "$window_idx"
-        fi
-    fi
+
+    # Kill tmux window synchronously — post-remove hook is background and races with popup close
+    [[ -n "$wt_path" ]] && "$HOME/scripts/wt-tmux-window" remove "$wt_path" 2>/dev/null || true
+    command wt remove $force --yes "$selection" 2>/dev/null || true
     exit 0
 fi
 
@@ -205,31 +198,27 @@ if [[ -z "$branch" ]]; then
     if [[ -z "$query" ]]; then
         exit 0
     fi
-    command wt switch --create --no-cd --yes "$query" 2>/dev/null || exit 0
-    AFTER=$(parse_worktrees)
-    path=$(path_for_branch "$AFTER" "$query")
-    if [[ -n "$path" ]]; then
-        tmux new-window -n "${query##*/}" -c "$path" "claude"
-    fi
+
+    printf 'Yes\nNo' | command fzf \
+        --ansi --no-multi --prompt="Create '$query'? > " \
+        --header="Create new worktree?" \
+        2>/dev/null | grep -q '^Yes$' || exit 0
+
+    # Pick base branch
+    default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') || default_branch="main"
+    base=$(git branch --format='%(refname:short)' 2>/dev/null | \
+        command fzf \
+            --ansi \
+            --prompt="base branch> " \
+            --header="Select base branch for '$query'" \
+            --query="$default_branch" \
+            --no-multi \
+            2>/dev/null) || exit 0
+
+    command wt switch --create --base "$base" --no-cd --yes "$query" 2>/dev/null || exit 0
     exit 0
 fi
 
-path=$(path_for_branch "$BEFORE" "$branch")
-
-if [[ -z "$path" ]]; then
-    # Branch exists but no worktree yet — let wt create it
-    command wt switch --no-cd --yes "$branch" 2>/dev/null || exit 0
-    AFTER=$(parse_worktrees)
-    path=$(path_for_branch "$AFTER" "$branch")
-    if [[ -z "$path" ]]; then
-        exit 0
-    fi
-fi
-
-window_idx=$(find_window_by_path "$path")
-
-if [[ -n "$window_idx" ]]; then
-    tmux select-window -t "$window_idx"
-else
-    tmux new-window -n "${branch##*/}" -c "$path"
-fi
+# Existing branch (with or without worktree) — wt handles creation if needed,
+# post-switch hook handles tmux window.
+command wt switch --no-cd --yes "$branch" 2>/dev/null || exit 0
