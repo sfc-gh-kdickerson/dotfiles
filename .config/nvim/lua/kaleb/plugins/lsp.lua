@@ -6,13 +6,11 @@ local lsps = {
   "jsonls",
   -- "pyright",
   "yamlls",
-  "jdtls",
   "zls",
   "rust_analyzer",
   "nil_ls",
-  "ts_ls"
+  "ts_ls",
 }
-vim.lsp.enable(lsps)
 
 local lsp_attach_group = vim.api.nvim_create_augroup("LspAttachConfig", { clear = true })
 vim.api.nvim_create_autocmd("LspAttach", {
@@ -22,7 +20,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
     local bufnr = args.buf
 
     if client and client.server_capabilities.inlayHintProvider then
-      vim.lsp.inlay_hint.enable(false, {bufnr = bufnr})
+      vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
     end
 
     -- stylua: ignore start
@@ -54,25 +52,23 @@ vim.lsp.config("*", {
 return {
   {
     "williamboman/mason.nvim",
-    lazy = true,
+    lazy = false,
     opts = {
       registries = { "github:mason-org/mason-registry", "github:nvim-java/mason-registry" },
     },
   },
   {
     "williamboman/mason-lspconfig.nvim",
-    lazy = true,
-    dependencies = { "williamboman/mason.nvim" },
-    config = function()
-      --- @diagnostic disable-next-line: missing-fields
-      require("mason-lspconfig").setup({
-        -- ensure_installed = lsps,
-      })
-    end,
+    lazy = false,
+    dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
+    opts = {
+      -- ensure_installed = lsps,
+      automatic_enable = false,
+    },
   },
   {
     "nvimtools/none-ls.nvim",
-    lazy = true,
+    event = "VeryLazy",
     config = function()
       local null_ls = require("null-ls")
       null_ls.setup({
@@ -105,13 +101,11 @@ return {
   },
   {
     "neovim/nvim-lspconfig",
-    event = "VeryLazy",
-    cmd = "Mason",
-    dependencies = {
-      "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
-      "nvimtools/none-ls.nvim",
-    },
+    lazy = false,
+    dependencies = { "williamboman/mason.nvim" },
+    config = function()
+      vim.lsp.enable(lsps)
+    end,
   },
   {
     "rachartier/tiny-inline-diagnostic.nvim",

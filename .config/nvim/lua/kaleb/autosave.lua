@@ -4,7 +4,7 @@ local debounce_ms = 500
 local autosaving = false
 
 ---@diagnostic disable-next-line: undefined-field
-local timer = vim.loop.new_timer()
+local timer = vim.uv.new_timer()
 local autosave_group = vim.api.nvim_create_augroup("AutoSave", { clear = true })
 vim.api.nvim_create_autocmd({ "TextChanged", "InsertLeave" }, {
   group = autosave_group,
