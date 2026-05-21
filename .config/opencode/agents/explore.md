@@ -1,7 +1,7 @@
 ---
 description: Maps repository structure and code behavior by tracing files, symbols, and dependencies for planning and implementation agents.
 mode: subagent
-model: opencode-go/minimax-m2.5
+model: opencode-go/minimax-m2.7
 color: "#89dceb"
 permission:
   "*": ask

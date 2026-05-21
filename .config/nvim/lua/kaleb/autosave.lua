@@ -1,4 +1,4 @@
-local filetypes = { "*.rs" }
+local filetypes = { "*.rs", "*.zig" }
 local debounce_ms = 500
 
 local autosaving = false
