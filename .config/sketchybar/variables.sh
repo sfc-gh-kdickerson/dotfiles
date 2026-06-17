@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-# --- Catppuccin Macchiato Palette ---
+# --- Catppuccin Mocha Palette ---
 THM_ROSEWATER=0xfff5e0dc
 THM_FLAMINGO=0xfff2cdcd
 THM_PINK=0xfff5c2e7
@@ -51,3 +51,34 @@ RIGHT_ITEM_PADDING_RIGHT=0
 LEFT_ITEM_PADDING_LEFT=1
 
 SHADOW=on
+
+# --- defaults that were referenced but never defined ---
+ICON_COLOR="$THM_TEXT"          # per-item scripts override with an accent
+LABEL_COLOR="$THM_SUBTEXT_1"    # neutral labels (the calm-the-rainbow move)
+FONT_SIZE=12                    # used by plugins/events.sh
+
+# --- floating island styling ---
+# Translucent island fills (both 80% opacity, no blur). Point ISLAND_BG at one to switch.
+ISLAND_BG_BLACK=0xcc000000      # pure black @ 80% — matches the WezTerm translucent background
+ISLAND_BG="$THM_MANTLE"
+ISLAND_RADIUS=7
+ISLAND_HEIGHT=26
+ISLAND_BORDER_COLOR="$THM_SURFACE_1"
+ISLAND_BORDER_WIDTH=0           # bump to 1 to outline islands
+ISLAND_SHADOW=on
+ISLAND_SHADOW_COLOR=0x40000000
+ISLAND_SHADOW_DISTANCE=3
+ISLAND_SHADOW_ANGLE=90
+
+# --- active workspace (soft raise) ---
+ACCENT_ACTIVE="$THM_PEACH"      # focused workspace number color
+WS_IDLE="$THM_OVERLAY_0"        # idle (non-empty) workspace number
+WS_EMPTY="$THM_SURFACE_2"       # empty workspace number (dimmer than idle)
+WS_CHIP="$THM_SURFACE_1"        # chip behind the focused number
+
+# --- motion ---
+ANIM_CURVE=tanh
+ANIM_DURATION=18
+
+# --- spacing between floating islands ---
+ISLAND_GAP=8                   # px of empty air between adjacent islands
