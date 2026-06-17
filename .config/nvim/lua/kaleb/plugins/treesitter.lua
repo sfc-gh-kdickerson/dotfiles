@@ -17,6 +17,7 @@ return {
         "toml",
         "yaml",
         "zig",
+        "asm"
       }
 
       vim.treesitter.language.register("bash", "sh")

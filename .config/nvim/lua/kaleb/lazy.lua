@@ -39,3 +39,5 @@ require("lazy").setup({
   checker = { enabled = false },
   change_detection = { enabled = false },
 })
+
+vim.cmd.packadd("nvim.tohtml")

@@ -35,7 +35,6 @@ source "$ITEM_DIR/front_app.sh"
 # Right (add order = right-to-left; clock lands at the far right)
 source "$ITEM_DIR/clock.sh"
 source "$ITEM_DIR/calendar.sh"
-source "$ITEM_DIR/events.sh"
 source "$ITEM_DIR/volume.sh"
 source "$ITEM_DIR/battery.sh"
 source "$ITEM_DIR/ram.sh"
@@ -57,7 +56,7 @@ ISLAND_PROPS=(
 
 sketchybar --add bracket spaces '/space\..*/' --set spaces "${ISLAND_PROPS[@]}"
 sketchybar --add bracket sysisland cpu ram battery sound --set sysisland "${ISLAND_PROPS[@]}"
-sketchybar --add bracket timeisland calevent calendar clock --set timeisland "${ISLAND_PROPS[@]}"
+sketchybar --add bracket timeisland calendar clock --set timeisland "${ISLAND_PROPS[@]}"
 
 #################### Finalizing Setup ####################
 
