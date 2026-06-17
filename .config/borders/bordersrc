@@ -1,10 +1,17 @@
 #!/bin/bash
 
+# Window borders, tuned to match the sketchybar floating-island rice (Catppuccin Mocha).
+# - active   = peach (0xfffab387), same accent as the focused-workspace chip in the bar
+# - inactive = surface1 (0xff45475a), same color as the island borders; quiet and recedes
+# - hidpi=off keeps borders crisp on the non-retina external (T27QD, 2560x1440 @ 1x).
+#   Flip to `on` if you'd rather optimize for the built-in Retina display.
 options=(
-    active_color=0xFFA6E3A1 
-    inactive_color=0xFFEBA0AC 
-    width=1 
-    order=above 
+    style=round
+    width=3.0
+    hidpi=off
+    active_color=0xfffab387
+    inactive_color=0xff45475a
+    order=above
     blacklist="Webex,iPhone Mirroring"
 )
 borders "${options[@]}"

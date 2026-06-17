@@ -3,12 +3,10 @@
 source "$HOME/.config/sketchybar/variables.sh" # Loads all defined colors
 
 # General bar and defaults
-
 sketchybar --bar height=30 \
-	color="$THM_BASE" \
-	shadow="$SHADOW" \
-    border_width="$BAR_BORDER_WIDTH" \
-    border_color="$THM_LAVENDER" \
+	color="$THM_TRANSPARENT" \
+	shadow=off \
+	border_width=0 \
 	position=top \
 	sticky=on \
 	padding_right=3 \
@@ -28,34 +26,38 @@ sketchybar --bar height=30 \
 	label.padding_left="$PADDINGS" \
 	label.padding_right="$PADDINGS" \
 	background.padding_right="$PADDINGS" \
-	background.padding_left="$PADDINGS" \
-    background.border_width="$BORDER_WIDTH" \
-    background.border_color="$THM_ROSEWATER"
+	background.padding_left="$PADDINGS"
 
 # Left
 source "$ITEM_DIR/spaces.sh"
 source "$ITEM_DIR/front_app.sh"
 
-# sketchybar --add bracket spaces '/space\..*/' seperator front_app \
-#            --set spaces background.color="$THM_SURFACE_0" \
-#                  background.corner_radius=4  \
-#                  background.height=30 
-
-# Right
+# Right (add order = right-to-left; clock lands at the far right)
 source "$ITEM_DIR/clock.sh"
 source "$ITEM_DIR/calendar.sh"
+source "$ITEM_DIR/events.sh"
 source "$ITEM_DIR/volume.sh"
 source "$ITEM_DIR/battery.sh"
 source "$ITEM_DIR/ram.sh"
 source "$ITEM_DIR/cpu.sh"
-source "$ITEM_DIR/events.sh"
-source "$ITEM_DIR/vpn.sh"
+# source "$ITEM_DIR/vpn.sh"
 
-# sketchybar --add bracket utils clock calendar volume battery ram cpu calevent \
-#            --set utils background.color="$THM_SURFACE_0" \
-#                  background.corner_radius=4  \
-#                  background.height=30 \
-#                  background.border_color="$THM_SURFACE_1" \
+# Islands (brackets) — added after the items exist
+ISLAND_PROPS=(
+	background.color="$ISLAND_BG"
+	background.corner_radius="$ISLAND_RADIUS"
+	background.height="$ISLAND_HEIGHT"
+	background.border_width="$ISLAND_BORDER_WIDTH"
+	background.border_color="$ISLAND_BORDER_COLOR"
+	background.shadow.drawing="$ISLAND_SHADOW"
+	background.shadow.color="$ISLAND_SHADOW_COLOR"
+	background.shadow.distance="$ISLAND_SHADOW_DISTANCE"
+	background.shadow.angle="$ISLAND_SHADOW_ANGLE"
+)
+
+sketchybar --add bracket spaces '/space\..*/' --set spaces "${ISLAND_PROPS[@]}"
+sketchybar --add bracket sysisland cpu ram battery sound --set sysisland "${ISLAND_PROPS[@]}"
+sketchybar --add bracket timeisland calevent calendar clock --set timeisland "${ISLAND_PROPS[@]}"
 
 #################### Finalizing Setup ####################
 

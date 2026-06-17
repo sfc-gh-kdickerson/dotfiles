@@ -7,7 +7,7 @@ sketchybar --add item clock right \
 	icon.padding_left=10 \
 	icon.color="$COLOR" \
 	icon="" \
-	label.color="$COLOR" \
+	label.color="$LABEL_COLOR" \
 	label.padding_right=5 \
 	label.width=99 \
 	align=center \
@@ -16,6 +16,5 @@ sketchybar --add item clock right \
 	background.padding_right=2 \
 	background.border_width="$BORDER_WIDTH" \
 	background.border_color="$COLOR" \
-	background.drawing=on \
-	script="$PLUGIN_DIR/clock.sh" \
-	background.color="$ITEM_BG_COLOR" \
+	background.drawing=off \
+	script="$PLUGIN_DIR/clock.sh"

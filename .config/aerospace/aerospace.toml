@@ -1,6 +1,6 @@
 start-at-login = true
 after-startup-command = [
-    'exec-and-forget borders active_color=0xFFA6E3A1 inactive_color=0xFFEBA0AC width=1.5 order=above blacklist="Webex,iPhone Mirroring"',
+    'exec-and-forget ~/.config/borders/bordersrc',
 ]
 exec-on-workspace-change = [
     '/bin/bash',

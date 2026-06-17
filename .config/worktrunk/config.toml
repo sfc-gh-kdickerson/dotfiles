@@ -76,7 +76,7 @@ worktree-path = "{{ repo_path }}/.worktrees/{{ branch | sanitize }}"
 copy-files = "wt step copy-ignored"
 
 [post-switch]
-tmux = "$HOME/scripts/wt-tmux-window switch {{ worktree_path }} {{ branch | sanitize }}"
+tmux = "B={{ branch }}; $HOME/scripts/wt-tmux-window switch {{ worktree_path }} ${B#*/}"
 
 [post-remove]
 tmux = "$HOME/scripts/wt-tmux-window remove {{ worktree_path }}"

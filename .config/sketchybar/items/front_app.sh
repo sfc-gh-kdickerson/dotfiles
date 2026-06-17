@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
 
-COLOR="$THM_TEXT"
+COLOR="$THM_BLUE"
 
-sketchybar --add item seperator left \
-	--set seperator update_freq=1 \
-	icon.padding_left="$LEFT_ITEM_PADDING_LEFT" \
-	icon.color="$COLOR" \
-	icon="" \
-	label.color="$COLOR" \
-	label.padding_right=0 
+# gap before front_app (sits between the spaces island and the app island)
+sketchybar --add item spc.left left \
+	--set spc.left icon.drawing=off label.drawing=off background.drawing=off
 
+# Static leading glyph (nf-fa-window_maximize). Swap to any Nerd Font glyph you like.
 sketchybar \
 	--add item front_app left \
 	--set front_app script="$PLUGIN_DIR/front_app.sh" \
-	icon.drawing=off \
-	background.height=26 \
-	background.padding_left=0 \
-	background.padding_right=0 \
-	background.border_width="$BORDER_WIDTH" \
-	background.border_color="$COLOR" \
-	background.corner_radius="$CORNER_RADIUS" \
-	background.color="$ITEM_BG_COLOR" \
-	label.color="$COLOR" \
-	label.padding_left=$LEFT_ITEM_PADDING_LEFT \
-	label.padding_right=0 \
+	icon="" \
+	icon.color="$COLOR" \
+	icon.padding_left=10 \
+	icon.padding_right=4 \
+	label.color="$LABEL_COLOR" \
+	label.padding_left=0 \
+	label.padding_right=10 \
+	background.drawing=on \
+	background.color="$ISLAND_BG" \
+	background.corner_radius="$ISLAND_RADIUS" \
+	background.height="$ISLAND_HEIGHT" \
+	background.border_width="$ISLAND_BORDER_WIDTH" \
+	background.border_color="$ISLAND_BORDER_COLOR" \
+	background.shadow.drawing="$ISLAND_SHADOW" \
+	background.shadow.color="$ISLAND_SHADOW_COLOR" \
+	background.shadow.distance="$ISLAND_SHADOW_DISTANCE" \
+	background.shadow.angle="$ISLAND_SHADOW_ANGLE" \
 	associated_display=active \
 	--subscribe front_app front_app_switched
