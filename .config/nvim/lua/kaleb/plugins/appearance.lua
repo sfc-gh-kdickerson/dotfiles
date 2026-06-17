@@ -25,7 +25,7 @@ return {
           percentage = 0.15, -- percentage of the shade to apply to the inactive window
         },
         auto_integrations = true,
-        transparent_background = false,
+        transparent_background = true,
         custom_highlights = function(colors)
           return {
             ["@keyword.operator"] = { fg = colors.mauve },
