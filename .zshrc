@@ -104,7 +104,7 @@ fi
 
 # Shell integrations
 eval "$(fzf --zsh)"
-eval "$(zoxide init --cmd cd zsh)"
+eval "$(zoxide init zsh)"
 
 function nix-profile-sync() {
     cd ~/nix-profiles/default;
@@ -134,6 +134,8 @@ unset __conda_setup
 export PATH="/Users/kdickerson/.local/bin:$PATH"
 
 alias coco="cortex"
+alias cc="sf ai claude -- --effort max --dangerously-skip-permissions"
+# alias cc="claude --effort max --dangerously-skip-permissions"
 
 # Cortex CLI completion (disable via /settings in cortex)
 [[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
@@ -146,3 +148,10 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
+
+export NVM_DIR="$HOME/.config/nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+export JIRA_URL="https://snowflakecomputing.atlassian.net"
+export JIRA_USERNAME="kaleb.dickerson@snowflake.com"
