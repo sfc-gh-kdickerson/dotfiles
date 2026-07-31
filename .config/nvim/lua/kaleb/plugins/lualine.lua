@@ -43,7 +43,6 @@ return {
           lualine_x = {
             utils.python_venv,
           },
-
           lualine_y = {
             "kulala",
             -- "lsp_status",

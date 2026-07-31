@@ -19,7 +19,6 @@
             direnv
             eza
             fzf
-            delta
             go
             gotools
             jq

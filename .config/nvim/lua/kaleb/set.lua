@@ -28,7 +28,6 @@ vim.opt.cmdheight = 0
 
 vim.diagnostic.config({
   virtual_text = true,
-  underline = true,
   severity_sort = true,
   signs = {
     text = {
