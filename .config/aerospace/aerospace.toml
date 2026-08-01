@@ -11,9 +11,8 @@ on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 enable-normalization-flatten-containers = true
 enable-normalization-opposite-orientation-for-nested-containers = true
 
-# add nix user level binaries to aerospace path
 [exec.env-vars]
-PATH = '${HOME}/.nix-profile/bin:/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
+PATH = '/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
 
 [gaps]
 inner.horizontal = 7

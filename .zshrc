@@ -77,11 +77,10 @@ prependToPath() {
 appendToPath() {
     PATH="$PATH:$1"
 }
-# order will be nix, homebrew, rust, go, normal, conda
+# order will be homebrew, rust, go, normal, conda
 prependToPath "$HOME/go/bin"
 prependToPath "$HOME/.cargo/bin:$PATH"
 prependToPath "/opt/homebrew/bin"
-prependToPath "$HOME/.nix-profile/bin"
 appendToPath "$HOME/miniconda3/bin"
 
 # exports
@@ -106,9 +105,3 @@ fi
 # Shell integrations
 eval "$(fzf --zsh)"
 eval "$(zoxide init --cmd cd zsh)"
-
-function nix-profile-sync() {
-    cd ~/nix-profiles/default;
-    nix flake update;
-    nix profile upgrade "nix-profiles/default"
-}
