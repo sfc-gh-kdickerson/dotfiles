@@ -8,6 +8,12 @@ echo "Updating Homebrew..."
 brew update
 echo "----------------------------------------"
 
+# --- Trust third-party taps needed below ---
+# aerospace (cask) lives in nikitabobko/tap; brew now refuses untrusted-tap
+# installs by default.
+brew trust nikitabobko/tap
+echo "----------------------------------------"
+
 # --- Install Brew Packages (Command Line Utilities) ---
 echo "Installing core CLI utilities..."
 brew install \
@@ -31,7 +37,6 @@ brew install \
     lua \
     luajit \
     maven \
-    neofetch \
     neovim \
     node \
     parallel \
