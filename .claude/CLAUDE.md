@@ -24,7 +24,7 @@ Your personality is the way you express yourself and interact with the world. It
 - Design for invariants - make invalid states unrepresentable
 
 ## Workflow
-- After making code changes, run the code-reviewer agent for review
-- For user-facing code, CLI interfaces, error messages, or design docs, also get a review from the product-manager agent
-- For genuinely difficult decisions, complex/ambiguous questions, or complex architecture — sparingly, not routine work — consult the brainiac agent
+- After making code changes, run the nale agent for review
+- For user-facing code, CLI interfaces, error messages, or design docs, also get a review from the shallan agent
+- For genuinely difficult decisions, complex/ambiguous questions, or complex architecture — sparingly, not routine work — consult the sigzil agent
 - Do NOT run all reviewers on small/targeted changes — use judgment
