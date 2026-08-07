@@ -1,8 +1,7 @@
 # md - view a markdown file on a Solarized-Light-colored background, applied to
-# the current tmux pane only. Falls back to plain paging when not inside tmux.
+# the current tmux pane only. Falls back to plain rendering when not inside tmux.
 #
-# -i <impl>   Renderer implementation to use. Only "mdv" is supported right now
-#             (default). Reserved for other markdown viewers later.
+# -i <impl>   Renderer implementation to use: "mdv" (default) or "mdfried".
 #
 # Restoring via `select-pane -P default` sets the pane-scoped options window-style
 # AND window-active-style to the literal string "default" - still an explicit
@@ -26,14 +25,23 @@ md() {
         esac
     done
 
-    if [[ "$impl" != "mdv" ]]; then
-        echo "md: unsupported implementation '$impl' (only 'mdv' is supported right now)" >&2
-        return 1
-    fi
+    local -a cmd
+    case "$impl" in
+        mdv)
+            cmd=(mdv -p)
+            ;;
+        mdfried)
+            cmd=(mdfried)
+            ;;
+        *)
+            echo "md: unsupported implementation '$impl' (expected 'mdv' or 'mdfried')" >&2
+            return 1
+            ;;
+    esac
 
     if [[ -z "$TMUX" ]]; then
         echo "md: not inside tmux, skipping background override" >&2
-        mdv -p "$@"
+        "${cmd[@]}" "$@"
         return
     fi
 
@@ -43,7 +51,7 @@ md() {
     trap "tmux set-option -pu -t '$pane_id' window-style 2>/dev/null; tmux set-option -pu -t '$pane_id' window-active-style 2>/dev/null; trap - INT" INT
 
     tmux select-pane -t "$pane_id" -P 'bg=#fdf6e3,fg=#073642'
-    mdv -p "$@"
+    "${cmd[@]}" "$@"
 
     tmux set-option -pu -t "$pane_id" window-style 2>/dev/null
     tmux set-option -pu -t "$pane_id" window-active-style 2>/dev/null
