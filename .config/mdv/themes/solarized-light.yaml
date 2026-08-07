@@ -1,0 +1,56 @@
+# Solarized Light, with higher-contrast body text: base02 (#073642) in place of
+# Solarized's own softer base00 (#657b83), against the base3 (#fdf6e3) background.
+# Standalone (no `extends`) so the syntax palette is tuned for a light background
+# rather than inherited from a dark theme.
+
+name: solarized-light
+description: Solarized Light, higher-contrast body text.
+
+# Text colors
+text: "#073642"
+text_light: "#586e75"
+
+# Heading colors (H1..H6)
+h1: "#073642"
+h2: "#073642"
+h3: "#073642"
+h4: "#073642"
+h5: "#073642"
+h6: "#586e75"
+
+# Special elements
+code: "#dc322f"
+code_block: "#073642"
+quote: "#586e75"
+link: "#268bd2"
+emphasis: "#073642"
+strong: "#073642"
+strikethrough: "#586e75"
+
+# Background and borders
+# background is parsed but currently a no-op for terminal ANSI output in mdv v4.2.1
+# (feeds syntect's code-block theme, which code.rs then strips before emitting ANSI
+# to keep layout widths stable). Kept here for documentation / HTML-export use.
+highlight_background: "#eee8d5"
+background: "#fdf6e3"
+border: "#93a1a1"
+
+# Lists and tables
+list_marker: "#073642"
+table_header: "#073642"
+table_border: "#93a1a1"
+
+# Error and warning
+error: "#dc322f"
+warning: "#cb4b16"
+
+# Syntax highlight palette (Solarized accent colors, tuned for a light background)
+syntax:
+  keyword: "#859900"
+  string: "#2aa198"
+  comment: "#586e75"
+  number: "#d33682"
+  operator: "#cb4b16"
+  function: "#268bd2"
+  variable: "#073642"
+  type_name: "#b58900"
