@@ -1,5 +1,6 @@
 local lsps = {
   "clangd",
+  "gopls",
   "markdown_oxide",
   "lua_ls",
   "bashls",
