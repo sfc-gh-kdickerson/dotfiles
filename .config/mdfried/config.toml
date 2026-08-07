@@ -1,5 +1,5 @@
 font_family = "Cascadia Code"
-ignore_text_sizing_protocol = true
+ignore_text_sizing_protocol = false
 
 # Solarized Light. NOTE: mdfried's Theme has no field for plain body/paragraph
 # text - only these decorative elements. Body text always uses the terminal's
