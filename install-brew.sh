@@ -23,6 +23,7 @@ brew install \
     borders \
     cmake \
     delta \
+    delve \
     direnv \
     eza \
     fd \
@@ -30,6 +31,7 @@ brew install \
     fzf \
     gcc \
     go \
+    golangci-lint \
     jenv \
     jq \
     k9s \
@@ -52,6 +54,7 @@ brew install \
     uv \
     watch \
     wget \
+    withgraphite/tap/graphite \
     yarn \
     yazi \
     yq \
@@ -65,4 +68,3 @@ brew install \
 # goimports (used by null-ls formatting in nvim's lsp.lua) has no brew formula —
 # nixpkgs bundled it under `gotools`. Install it once `go` is on PATH:
 #   go install golang.org/x/tools/cmd/goimports@latest
-
