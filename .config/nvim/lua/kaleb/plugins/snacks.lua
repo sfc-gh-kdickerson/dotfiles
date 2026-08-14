@@ -4,8 +4,9 @@ vim.api.nvim_create_autocmd("User", {
     Snacks.rename.on_rename_file(event.data.from, event.data.to)
   end,
 })
--- needed for image to know in kitty
-vim.env.TERM = "exterm-kitty"
+-- Over ssh+tmux the terminal probe can't reach ghostty, so snacks falls back to
+-- hover-floats instead of inline images. Assert it directly.
+vim.env.SNACKS_GHOSTTY = "1"
 
 vim.api.nvim_create_user_command("Zen", function()
   Snacks.zen()
@@ -37,7 +38,7 @@ return {
     animate = { enabled = true },
     statuscolumn = { enabled = true, left = { "git", "mark" }, right = { "sign", "fold" } },
     input = { enabled = true, b = { completion = true } },
-    image = { enabled = true },
+    image = { enabled = true, convert = { notify = true } },
     indent = { enabled = true, scope = { hl = "NormalFloat" } },
     scope = { enabled = true },
     bufdelete = { enabled = true },

@@ -13,6 +13,7 @@
 	line-numbers = true
 	features = catppuccin-mocha
 	true-color = always
+    side-by-side = false
 
 [merge]
 	conflictStyle = zdiff3

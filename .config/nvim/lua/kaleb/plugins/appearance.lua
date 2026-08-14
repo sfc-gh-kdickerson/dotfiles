@@ -89,4 +89,51 @@ return {
       vim.cmd("colorscheme " .. COLORSCHEME)
     end,
   },
+  {
+    "petertriho/nvim-scrollbar",
+    dependencies = { "lewis6991/gitsigns.nvim" },
+    opts = function()
+      local ok, palettes = pcall(require, "catppuccin.palettes")
+      if not ok then
+        return { handle = { blend = 0 } }
+      end
+      local P = palettes.get_palette("mocha")
+
+      -- Same vocabulary as the lualine pills: peach = focus, mauve = secondary,
+      -- diagnostics and diff reuse their pill colors so the gutter and the
+      -- statusline never disagree about what a warning looks like.
+      local function mark(color, text)
+        return { color = color, text = text }
+      end
+
+      -- Thin bar = one line, thick = several collapsed into one screen row.
+      local density = { "│", "┃" }
+
+      return {
+        show_in_active_only = true, -- splits shouldn't sprout four tracks
+        handle = {
+          color = P.base, -- same fill as the lualine pills
+          blend = 0, -- opaque; the track is chrome, not a ghost
+        },
+        marks = {
+          Cursor = mark(P.peach, "▎"),
+          Error = mark(P.red, density),
+          Warn = mark(P.yellow, density),
+          Info = mark(P.sky, density),
+          Hint = mark(P.teal, density),
+          Misc = mark(P.mauve, density),
+          GitAdd = mark(P.green, "┆"),
+          GitChange = mark(P.peach, "┆"),
+          GitDelete = mark(P.red, "▁"),
+        },
+        handlers = {
+          cursor = true,
+          diagnostic = true,
+          gitsigns = true,
+          handle = true,
+          search = false, -- needs hlslens, which isn't installed
+        },
+      }
+    end,
+  },
 }
