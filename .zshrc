@@ -25,6 +25,7 @@ else
 fi
 
 # plugins
+zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit light zsh-users/zsh-syntax-highlighting
 zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
@@ -81,6 +82,8 @@ appendToPath() {
 }
 # order will be homebrew, rust, go, normal, conda
 prependToPath "$HOME/go/bin"
+prependToPath "$HOME/firstpass/bin"
+prependToPath "$HOME/.local/bin"
 prependToPath "$HOME/.cargo/bin:$PATH"
 prependToPath "/opt/homebrew/bin"
 appendToPath "$HOME/miniconda3/bin"
@@ -108,4 +111,56 @@ fi
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 
+# sfid
+eval "$(sf aliases)"
+
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/kdickerson/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh" ]; then
+        . "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+# Added by the Cortex Code installer.
+export PATH="/Users/kdickerson/.local/bin:$PATH"
+
+alias coco="cortex"
+alias cc="CLAUDE_CODE_EFFORT_LEVEL=auto ENABLE_TOOL_SEARCH=true sf ai claude -- --dangerously-skip-permissions --model 'claude-sonnet-5[1m]'"
+# alias cc="claude --effort max --dangerously-skip-permissions"
 alias ca="agent --yolo"
+alias cx="sf ai codex --yolo"
+
+# Cortex CLI completion (disable via /settings in cortex)
+[[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
+
+# bun completions
+[ -s "/Users/kdickerson/.bun/_bun" ] && source "/Users/kdickerson/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
+
+export NVM_DIR="$HOME/.config/nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+export JIRA_URL="https://snowflakecomputing.atlassian.net"
+export JIRA_USERNAME="kaleb.dickerson@snowflake.com"
+
+# Added by sf setup
+if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
+  . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
+fi
+
+# opencode
+export PATH=/home/kdickerson/.opencode/bin:$PATH

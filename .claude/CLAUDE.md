@@ -25,6 +25,8 @@ Your personality is the way you express yourself and interact with the world. It
 
 ## Workflow
 - After making code changes, run the nale agent for review
+- For plans or changes involving architectural decisions or >3 files, also get feedback from the sumit agent (when Snowflake-related)
+- For general Snowflake knowledge questions (concepts, architecture, internals, SQL, debugging), also use the sumit agent
 - For user-facing code, CLI interfaces, error messages, or design docs, also get a review from the shallan agent
 - For genuinely difficult decisions, complex/ambiguous questions, or complex architecture — sparingly, not routine work — consult the sigzil agent
 - Do NOT run all reviewers on small/targeted changes — use judgment
