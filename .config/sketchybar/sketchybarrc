@@ -31,10 +31,13 @@ sketchybar --bar height=30 \
 # Left
 source "$ITEM_DIR/spaces.sh"
 source "$ITEM_DIR/front_app.sh"
+source "$ITEM_DIR/ai_spend.sh"
+source "$ITEM_DIR/claude_status.sh"
 
 # Right (add order = right-to-left; clock lands at the far right)
 source "$ITEM_DIR/clock.sh"
 source "$ITEM_DIR/calendar.sh"
+source "$ITEM_DIR/events.sh"
 source "$ITEM_DIR/volume.sh"
 source "$ITEM_DIR/battery.sh"
 source "$ITEM_DIR/ram.sh"
@@ -55,8 +58,10 @@ ISLAND_PROPS=(
 )
 
 sketchybar --add bracket spaces '/space\..*/' --set spaces "${ISLAND_PROPS[@]}"
+sketchybar --add bracket ai_spend_island ai_spend.today ai_spend.week --set ai_spend_island "${ISLAND_PROPS[@]}"
+sketchybar --add bracket claude_status_island claude_status --set claude_status_island "${ISLAND_PROPS[@]}"
 sketchybar --add bracket sysisland cpu ram battery sound --set sysisland "${ISLAND_PROPS[@]}"
-sketchybar --add bracket timeisland calendar clock --set timeisland "${ISLAND_PROPS[@]}"
+sketchybar --add bracket timeisland calevent calendar clock --set timeisland "${ISLAND_PROPS[@]}"
 
 #################### Finalizing Setup ####################
 

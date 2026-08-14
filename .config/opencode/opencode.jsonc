@@ -1,0 +1,146 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["context-mode"],
+  "enabled_providers": ["anthropic", "openai"],
+  "model": "anthropic/claude-opus-5",
+  "small_model": "anthropic/claude-opus-4-8",
+  "default_agent": "light",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "https://snowhouse.snowflakecomputing.com/api/v2/cortex/anthropic/v1",
+        "apiKey": "{env:SNOWHOUSE_OAUTH_TOKEN}",
+        "headers": {
+          "Authorization": "Bearer {env:SNOWHOUSE_OAUTH_TOKEN}",
+          "X-SNOWFLAKE-APPLICATION": "sf-ai-opencode"
+        }
+      },
+      "models": {
+        "claude-opus-5": { "name": "Claude Opus 5 (Snowflake)" },
+        "claude-opus-4-8": { "name": "Claude Opus 4.8 (Snowflake)" }
+      },
+      "whitelist": [
+        "claude-opus-5",
+        "claude-opus-4-8"
+      ]
+    },
+    "openai": {
+      "options": {
+        "baseURL": "https://snowhouse.snowflakecomputing.com/api/v2/cortex/v1",
+        "apiKey": "{env:SNOWHOUSE_OAUTH_TOKEN}",
+        "headers": {
+          "X-SNOWFLAKE-APPLICATION": "sf-ai-opencode"
+          // "sf-ml-client-app": "es-ai-devex-capacity"
+        }
+      },
+      "models": {
+        "openai-gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol (Snowflake)",
+          "reasoning": true,
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        },
+        "openai-gpt-5.6-luna": {
+          "name": "GPT-5.6 Luna (Snowflake)",
+          "reasoning": true,
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        },
+        "openai-gpt-5.6-terra": {
+          "name": "GPT-5.6 Terra (Snowflake)",
+          "reasoning": true,
+          "variants": {
+            "low": { "reasoningEffort": "low" },
+            "medium": { "reasoningEffort": "medium" },
+            "high": { "reasoningEffort": "high" },
+            "xhigh": { "reasoningEffort": "xhigh" }
+          }
+        }
+      },
+      "whitelist": ["openai-gpt-5.6-sol", "openai-gpt-5.6-luna", "openai-gpt-5.6-terra"]
+    }
+  },
+  "agent": {
+    "build": {
+      "model": "openai/openai-gpt-5.6-terra",
+      "variant": "high"
+    },
+    "plan": {
+      "model": "anthropic/claude-opus-5",
+      "variant": "high"
+    },
+    "compaction": {
+      "model": "openai/openai-gpt-5.6-terra",
+      "variant": "low"
+    },
+    "explore": {
+      "model": "openai/openai-gpt-5.6-luna",
+      "variant": "low"
+    },
+    "summary": {
+      "model": "openai/openai-gpt-5.6-luna",
+      "variant": "low"
+    },
+    "title": {
+      "model": "openai/openai-gpt-5.6-luna",
+      "variant": "low"
+    },
+    "light": {
+      "mode": "primary",
+      "description": "Lightweight general-purpose agent for routine tasks.",
+      "model": "openai/openai-gpt-5.6-luna",
+      "variant": "low"
+    },
+    "code-reviewer": {
+      "mode": "subagent",
+      "description": "Reviews code changes for correctness, style, and bugs. Read-only -- reports findings, does not edit.",
+      "model": "openai/openai-gpt-5.6-sol",
+      "variant": "high",
+      "prompt": "{file:./prompts/code-reviewer.md}",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "deny",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git status*": "allow"
+        },
+        "task": "deny",
+        "natoma-*": "deny",
+        "webfetch": "allow"
+      }
+    },
+    "sumit": {
+      "mode": "subagent",
+      "description": "Principal-engineer-level Snowflake internals expert -- Global Services, Experience Platform, SnowML architecture and implementation details.",
+      "model": "anthropic/claude-opus-5",
+      "variant": "high",
+      "prompt": "{file:./prompts/sumit.md}"
+    }
+  },
+  "mcp": {
+    "natoma-atlassian": {
+      "type": "remote",
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/atlassian-remote/mcp",
+      "oauth": { "callbackPort": 8456 }
+    },
+    "natoma-gdrive": {
+      "type": "remote",
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/google-drive/mcp",
+      "oauth": { "callbackPort": 8456 }
+    },
+    "natoma-slack": {
+      "type": "remote",
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/slack-remote/mcp",
+      "oauth": { "callbackPort": 8456 }
+    }
+  }
+}
