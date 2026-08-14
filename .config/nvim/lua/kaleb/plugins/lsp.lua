@@ -5,7 +5,7 @@ local lsps = {
   "lua_ls",
   "bashls",
   "jsonls",
-  -- "pyright",
+  "pyright",
   "yamlls",
   "zls",
   "rust_analyzer",
@@ -63,7 +63,7 @@ return {
     lazy = false,
     dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
     opts = {
-      -- ensure_installed = lsps,
+      ensure_installed = lsps,
       automatic_enable = false,
     },
   },
@@ -76,10 +76,12 @@ return {
         -- debug = true,
         sources = {
           null_ls.builtins.code_actions.gitsigns,
-          null_ls.builtins.formatting.black,
+          null_ls.builtins.formatting.black.with({
+            args = { "--safe", "--line-length=120" },
+          }),
           null_ls.builtins.formatting.goimports,
           null_ls.builtins.formatting.isort,
-          null_ls.builtins.diagnostics.mypy,
+          -- null_ls.builtins.diagnostics.mypy,
           null_ls.builtins.formatting.prettier.with({
             filetypes = {
               "javascript",

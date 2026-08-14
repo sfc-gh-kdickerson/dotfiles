@@ -1,5 +1,6 @@
 start-at-login = true
 after-startup-command = [
+    'exec-and-forget sketchybar',
     'exec-and-forget ~/.config/borders/bordersrc',
 ]
 exec-on-workspace-change = [
@@ -83,6 +84,7 @@ alt-w = ["exec-and-forget open -a 'WezTerm'"]
 alt-m = ["exec-and-forget open -a 'Gmail'"]
 alt-c = ["exec-and-forget open -a 'Google Calendar'"]
 alt-b = ["exec-and-forget open -a 'Cursor'"]
+alt-ctrl-space = ['exec-and-forget open -a "Gemini"']
 
 [mode.resize.binding]
 h = 'resize width -50'
@@ -93,17 +95,20 @@ enter = 'mode main'
 esc = 'mode main'
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|quicktime player)'
-run = ['layout floating']  
+if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|quicktime player|1password|cafe|gemini|graphite)'
+run = ['layout floating']
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(chrome|firefox)'
-if.during-aerospace-startup = false
-run = ['layout tiling', 'move-node-to-workspace 1']  
+if.app-id = 'com.jetbrains.cwm.guest'
+run = ['layout floating']
+
+[[on-window-detected]]
+if.app-name-regex-substring = '(chrome|firefox|prisma)'
+# run = ['layout tiling', 'move-node-to-workspace 1']  
+run = ['layout tiling']  
 
 [[on-window-detected]]
 if.app-name-regex-substring = '(wezterm|ghostty|kitty)'
-if.during-aerospace-startup = false
 run = ['layout tiling', 'move-node-to-workspace 2']  
 
 [[on-window-detected]]
@@ -111,7 +116,7 @@ if.app-name-regex-substring = '(intellij|jetbrains)'
 run = ['layout tiling', 'move-node-to-workspace 3']  
 
 [[on-window-detected]]
-if.app-id = 'com.apple.Safari'
+if.app-name-regex-substring = 'cursor'
 if.during-aerospace-startup = true
 run = ['layout tiling', 'move-node-to-workspace 4']  
 
@@ -122,7 +127,7 @@ run = ['layout tiling', 'move-node-to-workspace 5']
 
 [[on-window-detected]]
 if.during-aerospace-startup = true
-if.app-name-regex-substring = 'radar'
+if.app-name-regex-substring = 'jira'
 run = ['layout tiling', 'move-node-to-workspace 6']  
 
 [[on-window-detected]]
@@ -131,7 +136,7 @@ if.app-name-regex-substring = 'compass'
 run = ['layout tiling', 'move-node-to-workspace 7']  
 
 [[on-window-detected]]
-if.app-id = 'Cisco-Systems.Spark'
+if.app-name-regex-substring = 'zoom'
 run = ['layout tiling', 'move-node-to-workspace 9']  
 
 [[on-window-detected]]
@@ -140,3 +145,4 @@ if.during-aerospace-startup = true
 run = ['layout tiling', 'move-node-to-workspace 10']  
 [workspace-to-monitor-force-assignment]
 10 = ['secondary', 'main']
+

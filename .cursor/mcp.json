@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "glean": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "run", "glean"]
+    },
+    "natoma-atlassian": {
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/atlassian-remote/mcp"
+    },
+    "natoma-gdrive": {
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/google-drive/mcp"
+    },
+    "natoma-slack": {
+      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/slack-remote/mcp"
+    }
+  }
+}
