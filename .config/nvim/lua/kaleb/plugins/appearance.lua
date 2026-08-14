@@ -3,12 +3,19 @@ return {
     {
       "Bekaboo/dropbar.nvim",
       event = "BufReadPre",
-      -- config = function()
-      --   local dropbar_api = require("dropbar.api")
-      --   vim.keymap.set("n", "<Leader>;", dropbar_api.pick, { desc = "Pick symbols in winbar" })
-      --   vim.keymap.set("n", "[;", dropbar_api.goto_context_start, { desc = "Go to start of current context" })
-      --   vim.keymap.set("n", "];", dropbar_api.select_next_context, { desc = "Select next context" })
-      -- end,
+      opts = {
+        sources = {
+          path = {
+            modified = function(sym)
+              -- Peach bullet replaces the file icon when the buffer is dirty.
+              return sym:merge({
+                icon = "● ",
+                icon_hl = "DropBarModified",
+              })
+            end,
+          },
+        },
+      },
     },
   },
   {
@@ -31,6 +38,7 @@ return {
             ["@keyword.operator"] = { fg = colors.mauve },
             NormalNC = { bg = colors.crust },
             WinBarNC = { bg = colors.crust },
+            DropBarModified = { fg = colors.peach },
           }
         end,
         styles = { -- Handles the styles of general hi groups (see `:h highlight-args`):

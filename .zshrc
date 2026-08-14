@@ -1,7 +1,8 @@
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+# Skip when Cursor Agent runs — fancy prompts break its shell compatibility.
+if [[ -z "$CURSOR_AGENT" ]] && [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
@@ -15,9 +16,13 @@ fi
 # Source/Load zinit
 source "${ZINIT_HOME}/zinit.zsh"
 
-# p10k
-zinit ice depth"1" lucid; zinit light romkatv/powerlevel10k
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# p10k — disable when Cursor Agent runs
+if [[ -n "$CURSOR_AGENT" ]]; then
+  # Skip theme initialization for better compatibility
+else
+  zinit ice depth"1" lucid; zinit light romkatv/powerlevel10k
+  [[ -r ~/.p10k.zsh ]] && source ~/.p10k.zsh
+fi
 
 # plugins
 zinit light zsh-users/zsh-syntax-highlighting
@@ -44,12 +49,9 @@ function zvm_after_init() {
 
 # Oh My Zsh snippets
 zinit snippet OMZP::aws
+zinit snippet OMZP::colored-man-pages
 zinit snippet OMZP::git
 zinit snippet OMZP::sudo
-zinit snippet OMZP::colored-man-pages
-
-# Remind me to use aliases
-zinit ice wait"2" lucid; zinit light MichaelAquilina/zsh-you-should-use
 
 # History
 HISTFILE=~/.zsh_history
@@ -104,4 +106,6 @@ fi
 
 # Shell integrations
 eval "$(fzf --zsh)"
-eval "$(zoxide init --cmd cd zsh)"
+eval "$(zoxide init zsh)"
+
+alias ca="agent --yolo"

@@ -1,0 +1,18 @@
+{
+    "version": 1,
+    "editor": {
+        "vimMode": true
+    },
+    "permissions": {
+        "allow": [],
+        "deny": []
+    },
+    "display": {
+        "showLineNumbers": true,
+        "showThinkingBlocks": false,
+        "showStatusIndicators": true,
+        "showStatusLineRunningTime": true
+    },
+    "hints": true,
+    "rewind": true
+}

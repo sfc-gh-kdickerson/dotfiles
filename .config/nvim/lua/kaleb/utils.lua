@@ -38,11 +38,10 @@ M.python_venv = function()
 
   -- Prioritize Conda environment name if set
   if conda_env and conda_env ~= "base" then
-    -- Conda environment names are typically just the name, not a full path
-    return string.format("🐍 (Conda) %s", conda_env)
+    return string.format("(Conda) %s", conda_env)
   elseif venv then
-    -- Use the name of the standard virtual environment directory
-    return string.format("🐍 %s", vim.fn.fnamemodify(venv, ":h:t"))
+    -- Basename of the virtualenv directory (VIRTUAL_ENV points at the root)
+    return vim.fn.fnamemodify(venv, ":t")
   else
     return ""
   end
