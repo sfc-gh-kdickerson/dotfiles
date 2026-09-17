@@ -1,0 +1,42 @@
+# Files + diff only, stacked vertically (files on top, diff below).
+# Invoke: lazygit -ucf ~/.config/lazygit/files-diff.yml
+#
+# Tuned for watching an agent edit a repo: flat file list, snappy-but-stable
+# refresh, chrome stripped.
+git:
+  pagers:
+    - colorArg: always
+      pager: delta --features=catppuccin-mocha --paging=never --line-numbers --wrap-max-lines=0 --hunk-header-style=line-number --hunk-header-decoration-style=ul
+  autoRefresh: true
+  autoFetch: false
+  autoDetectExternalChanges: true
+  diffContextSize: 1
+gui:
+  screenMode: half
+  enlargedSideViewLocation: top
+  mainPanelSplitMode: vertical
+  scrollHeight: 10
+  mouseEvents: false
+  showCommandLog: false
+  showBottomLine: false
+  showFileTree: true
+  showNumstatInFilesView: true
+  showRandomTip: false
+  showListFooter: false
+  showPanelJumps: false
+  # files/branches/commits are required; drop worktrees/submodules from the files panel
+  sidePanels:
+    - [status]
+    - [files]
+    - [branches]
+    - [commits]
+refresher:
+  refreshInterval: 2
+  externalChangeCheckInterval: 5
+disableStartupPopups: true
+keybinding:
+  universal:
+    # Enter focuses the diff instead of opening the staging view.
+    # Staging / dir collapse still available via `i`.
+    focusMainView: [<enter>, "0"]
+    goInto: i
