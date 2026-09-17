@@ -1,16 +1,13 @@
 ---
 name: snowflake
-description: Gather Snowflake platform context using Glean search and Cortex CLI. Use when you need internal Snowflake knowledge, codebase info, docs, or environment-specific answers.
+description: Gather Snowflake platform context using Glean search and public docs. Use when you need internal Snowflake knowledge, codebase info, docs, or environment-specific answers.
 user_invocable: true
 arguments:
   - name: question
     description: "The question or topic to research"
     required: true
-  - name: connection
-    description: "Snowflake connection name for environment-specific queries (e.g., snowhouse, prod3, preprod8)"
-    required: false
   - name: source
-    description: "Where to search: 'glean', 'cortex', 'docs', or 'all' (default: all)"
+    description: "Where to search: 'glean', 'docs', or 'all' (default: all)"
     required: false
 ---
 
@@ -28,6 +25,7 @@ Use Glean for:
 - Code search across Snowflake repositories
 - People and team information
 - Jira tickets, Confluence pages, Google Docs
+- Environment-specific knowledge captured in internal docs or tickets
 
 ### 2. Snowflake Public Docs (docs.snowflake.com)
 
@@ -36,15 +34,6 @@ Use public docs for:
 - Feature guides, tutorials, and best practices
 - Release notes and known limitations
 - Anything a customer would see in the public documentation
-
-### 3. Cortex (Snowflake's AI Agent)
-
-Use Cortex for:
-- Snowflake product documentation and SQL syntax
-- Environment-specific queries (warehouse state, table schemas, query history)
-- Snowflake architecture and feature questions
-- Running or validating SQL against Snowflake
-- Anything that benefits from Snowflake-native tool access (search objects, semantic views, etc.)
 
 ## Routing Logic
 
@@ -55,9 +44,8 @@ Determine the best source based on the question:
 | Internal docs, design decisions, RFCs | Glean | "What's the design doc for feature X?", "Who owns service Y?" |
 | Slack threads, discussions | Glean | "What did the team decide about Z?", "Any discussion on topic W?" |
 | Internal code search | Glean | "Where is function X implemented?", "Find the PR for change Y" |
-| Snowflake product docs, SQL help | Public Docs or Cortex | "How do dynamic tables work?", "Syntax for CREATE STAGE" |
+| Snowflake product docs, SQL help | Public Docs | "How do dynamic tables work?", "Syntax for CREATE STAGE" |
 | Official feature reference, release notes | Public Docs | "What are the limits on external stages?", "CREATE STAGE syntax" |
-| Environment-specific state | Cortex (with connection) | "What tables exist in schema X?", "Show warehouse usage" |
 | Architecture, platform internals | Both | "How does service X work and what's its Snowflake footprint?" |
 
 If the `source` argument is provided, use that. Otherwise, default to all sources in parallel.
@@ -79,7 +67,7 @@ Launch a Task with `subagent_type: "general-purpose"` that uses the Glean MCP to
 Glean search tips:
 - Use short, targeted keywords — not full sentences
 - Use filters: `owner:"name"`, `from:"name"`, `updated:past_week`, `app:"github"`, `app:"slackentgrid"`, `app:"confluence"`
-- For code: use `code_search` with function/class names, not natural language
+- For code: use `code_search` with function/class names, not natural language. Start in the two repos that cover most questions: `snowflake-eng/snowflake` (Global Services — SQL, planner, job execution) and `snowflake-eng/snowml` (ML client and container runtime). Widen only if the hit is clearly elsewhere.
 - Chain: search first, then `read_document` on the most relevant URLs for full content
 - For complex questions requiring synthesis: use `chat` tool
 
@@ -101,44 +89,22 @@ Public docs tips:
 - Fetch the top 1-2 most relevant URLs — don't scrape the whole site
 - The docs site is well-structured: SQL reference, guides, and API docs are separate sections
 - If a page redirects, WebFetch will tell you — follow the redirect URL
-- Cross-reference with Glean/Cortex results when possible to catch internal-vs-public discrepancies
-
-### Cortex Subagent
-
-Launch a Task with `subagent_type: "general-purpose"` that runs cortex in headless mode via Bash:
-
-```bash
-cortex -p "<question>" 2>&1
-```
-
-With a specific connection (for environment-specific queries):
-```bash
-cortex -c <connection> -p "<question>" 2>&1
-```
-
-Cortex tips:
-- Use `-p` flag for headless/non-interactive mode — this is mandatory
-- Use `-c <connection>` when the question is about a specific environment
-- Available connections: `snowhouse` (default/internal), `prod3`, `preprod8`, `qa6`, `gcppreprod3`, `azpp4`
-- Cortex has access to Snowflake SQL execution, object search, docs search, semantic views, and more
-- Set a reasonable timeout (60s+) — cortex queries can take a moment
-- Tell the subagent to summarize the key findings concisely
+- Cross-reference with Glean results when possible to catch internal-vs-public discrepancies
 
 ### Parallel Execution
 
-When multiple sources are needed, launch subagents **in parallel** as separate Task calls in the same message. For example, a product docs question might launch both a Public Docs subagent and a Cortex subagent simultaneously.
+When multiple sources are needed, launch subagents **in parallel** as separate Task calls in the same message. For example, a product docs question might launch both a Public Docs subagent and a Glean subagent simultaneously.
 
 ## Response
 
 After subagents return:
 1. Synthesize findings into a concise answer
-2. Cite sources where relevant (doc URLs from Glean, connection/environment from Cortex)
+2. Cite sources where relevant (doc URLs from Glean)
 3. Flag any contradictions between sources
 4. If neither source had a good answer, say so and suggest where the user might look
 
 ## Important
 
-- **Always use subagents** — never call Glean MCP tools or cortex directly in the main conversation
+- **Always use subagents** — never call Glean MCP tools directly in the main conversation
 - **Summarize, don't dump** — the whole point is to keep the main context clean
 - **Respect permissions** — Glean results are permission-filtered; if nothing comes back, the doc may exist but be restricted
-- **Connection matters** — environment-specific questions without a connection will use the default (snowhouse); ask the user if unclear which environment they mean
