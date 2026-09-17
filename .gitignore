@@ -1,6 +1,10 @@
 .config/k9s/clusters
 .config/k9s/screen-dumps
 .config/k9s/k9s.log
+.config/cursor/auth.json
+.config/cursor/chats/
+.config/cursor/statsig-cache.json
+.config/cursor/prompt_history.json
 
 .zshrc.d/work.sh
 .zshrc.d/ignored.sh
