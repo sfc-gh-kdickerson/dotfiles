@@ -1,4 +1,5 @@
 {
+  "$schema": "https://opencode.ai/theme.json",
   "defs": {
     "rosewater": "#F5E0DC",
     "flamingo": "#F2CDCD",
