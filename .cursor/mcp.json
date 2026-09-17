@@ -5,14 +5,50 @@
       "command": "/opt/sf-cli/dist/sf",
       "args": ["mcp", "run", "glean"]
     },
-    "natoma-atlassian": {
-      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/atlassian-remote/mcp"
+    "jenkins": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "run", "jenkins"]
     },
-    "natoma-gdrive": {
-      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/google-drive/mcp"
+    "natoma_atlassian_remote": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "natoma", "run", "atlassian-remote"]
     },
-    "natoma-slack": {
-      "url": "https://snowflake.mcp.nova.cortex.snowflake.app/v2/profile/default-profile/slack-remote/mcp"
+    "natoma_google_calendar": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "natoma", "run", "google-calendar"]
+    },
+    "natoma_google_drive": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "natoma", "run", "google-drive"]
+    },
+    "natoma_google_gmail": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "natoma", "run", "google-gmail"]
+    },
+    "natoma_slack_remote": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "natoma", "run", "slack-remote"]
+    },
+    "snowci": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "run", "snowci"]
+    },
+    "snowhouse": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "run", "snowhouse"]
+    },
+    "snowtrail": {
+      "type": "stdio",
+      "command": "/opt/sf-cli/dist/sf",
+      "args": ["mcp", "run", "snowtrail"]
     }
   }
 }
