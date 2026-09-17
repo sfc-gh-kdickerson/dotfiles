@@ -31,8 +31,9 @@ it stops scope creep in review and tells the implementer where the edges are.
 
 ## Proposed design
 The meat. Architecture, key components, data flow, interfaces, and the
-decisions that matter. Diagrams earn their space here. Be concrete: name the
-actual components, show the actual shapes.
+decisions that matter. Draw the architecture (mermaid in Markdown); name the
+actual components and show the actual shapes. A paragraph that only
+*describes* the topology is the wrong medium.
 
 For anything a reader has to both *use* and *build*, separate two altitudes (the
 Rust RFC template's guide-level vs reference-level split): first explain it as if
@@ -43,10 +44,11 @@ them; on a large one, don't.
 
 ## Alternatives considered
 The real options you weighed and why you rejected each — honest tradeoffs, not
-strawmen. This is the section that separates a design doc from a pitch, and it
-preempts the reviewer's first question. Include the null option: what happens if
-we do nothing, or do something smaller? "Do nothing" is always on the table, and
-a proposal that can't beat it isn't ready.
+strawmen. Put them in a comparison table (option × criterion), then one sentence
+on why you picked the winner. Sequential essays of "Option A is… Option B is…"
+make the reader reconstruct the tradeoff. Include the null option: what happens
+if we do nothing, or do something smaller? "Do nothing" is always on the table,
+and a proposal that can't beat it isn't ready.
 
 ## Drawbacks / risks / failure modes
 Answer the blunt question the strongest RFC processes require as its own section
@@ -67,7 +69,8 @@ miserable to operate get caught here.
 
 ## Rollout plan
 How it ships safely: phases, feature flags, migration/backfill, monitoring, and
-a backout path. "How do we turn this off if it's bad?" should have an answer.
+a backout path. A phase table (phase × what ships × how to stop) beats a
+narrative. "How do we turn this off if it's bad?" should have an answer.
 
 ## Open questions
 What you haven't resolved. Listing these is a strength — it focuses review on
@@ -84,6 +87,8 @@ Optional: an appendix for detailed benchmarks, schemas, or derivations that woul
 - **Unfalsifiable claims.** "This will scale," "this is more maintainable." Attach a number or a mechanism, or cut the claim.
 - **No rollout / backout.** A design that can't be turned off or migrated to isn't finished.
 - **Decision buried.** The recommendation is on page 6. Put it in the summary.
+- **Prose where a picture would do.** Architecture described in paragraphs, alternatives as sequential essays. Draw the flow; table the tradeoff.
+- **Table exhaustion.** The inverse: leftover facts stuffed into adjacent two-column grids, or a "notes" table that was a paragraph. One comparison table is enough; caveats stay in sentences.
 
 ## How a reviewer grades it
 
