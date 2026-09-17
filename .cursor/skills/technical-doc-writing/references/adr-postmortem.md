@@ -37,6 +37,7 @@ recorded.
 - **One decision per ADR.** If you're recording three decisions, write three.
 - **Immutable — supersede, don't edit.** When a decision changes, write a new ADR and mark the old one `Superseded by ADR-XXXX`. The record of what you used to think is the point.
 - **Keep it short.** An ADR is a page, not a design doc. If it's growing a rollout plan and alternatives analysis, it wanted to be a design doc.
+- **Options as essays.** If you reach for MADR because the contenders matter, table them (option × driver). Don't write three paragraphs the reader has to align by hand.
 - **Consequences with no downside** is the most common tell that the author was rationalizing, not recording.
 
 ### A richer template: MADR
@@ -77,8 +78,8 @@ Who and what was affected, quantified: requests failed, duration, customers
 hit, revenue or SLA impact. Numbers, not "some users."
 
 ## Timeline
-Key events in UTC: first symptom, detection, mitigation, resolution. Factual,
-timestamped, no interpretation.
+Key events in UTC: first symptom, detection, mitigation, resolution. A
+timestamped table (time × event), not a narrative. Factual, no interpretation.
 
 ## Root cause
 The actual why — follow it down past the surface trigger. "A deploy went out"
@@ -92,8 +93,9 @@ The conditions that made it worse or slower to catch — the holes that lined up
 Honest both ways. What in detection or response worked, and what didn't.
 
 ## Action items
-Concrete fixes, each with an owner and a tracking link. This is the payload of
-the whole document — an action item with no owner will not happen.
+Concrete fixes, each with an owner and a tracking link. A table (action ×
+owner × bug × due) is the payload of the whole document — an action item
+with no owner will not happen.
 
 ## Lessons learned
 What the team now knows that it didn't before.
@@ -106,6 +108,7 @@ What the team now knows that it didn't before.
 - **"Root cause: human error"** is never a root cause. Ask why the system allowed the error.
 - **Action items without owners or dates** are a wish list. Assign and track them. Google enforces this by requiring at least one high-priority (P0/P1) bug for every user-affecting outage — the tracked fix is what separates a postmortem from a diary.
 - **Unquantified impact** ("some users saw errors") hides the severity and the priority the fixes deserve.
+- **Timeline as a story.** The reader should scan times, not hunt them in paragraphs.
 
 ### Review it, or it never happened
 

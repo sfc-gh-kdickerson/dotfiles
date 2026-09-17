@@ -17,5 +17,13 @@ The structural guidance and review heuristics in this skill are grounded in prim
 - **Google SRE Book — Postmortem Culture** — the canonical blameless definition, pre-defined trigger criteria, and the review checklist. https://sre.google/sre-book/postmortem-culture/
 - **Google SRE Workbook — Postmortem Culture** — "a postmortem without subsequent action is indistinguishable from no postmortem," the P0/P1-bug rule, and the blameless-language rewrite example. https://sre.google/workbook/postmortem-culture/
 
+## Presentation / medium
+The "show, don't tell" default (tables, diagrams, code blocks over prose walls)
+is a writing heuristic added to this skill, not traced to a specific RFC, ADR,
+or SRE source. It complements the concreteness those templates already require;
+it is not itself a citation. The paired warning — tables are great but table
+exhaustion is a real thing — is the same kind of heuristic: don't convert every
+leftover sentence into a grid.
+
 ## Not yet grounded here
 One-pager canonical structure, Google's "Design Docs at Google" (Ubl / industrialempathy) specifics, Amazon's six-pager / PR-FAQ practice, and IETF normative-language conventions (MUST/SHOULD/MAY) were **not** independently verified in this pass. The one-pager guidance here is a sensible synthesis, not a citation. Worth a follow-up research pass if you want those anchored.

@@ -17,17 +17,20 @@ What this spec covers, and what's explicitly deferred to later work. Keep the
 implementer inside the lines.
 
 ## Interfaces / API / schema
-The exact signatures, types, endpoints, config keys, and data models. This is
-the section where precision beats prose — write the literal names and shapes
-the code will use, verbatim. Ambiguity here becomes bugs.
+The exact signatures, types, endpoints, config keys, and data models. Write
+them as fenced code or schema, verbatim — the names and shapes the code will
+use. A paragraph that describes the endpoint is not a spec. Ambiguity here
+becomes bugs.
 
 ## Data flow / control flow
 How a request or record moves through the system, step by step. Sequence
-diagrams pay for themselves.
+diagrams pay for themselves; don't narrate the hops in prose and then skip
+the picture.
 
 ## Changes by component
-What changes and where, at the module/file level. What's new, what's modified,
-what's deleted. Enough that a reviewer knows where each PR will touch.
+What changes and where, at the module/file level. A table (component |
+change | new/mod/del | which PR) is enough that a reviewer knows where each
+PR will touch.
 
 ## Migration / backfill
 If data, schema, or state changes: the migration steps, ordering, and how you
@@ -40,8 +43,9 @@ it, you don't understand it yet.
 
 ## Sequencing / PR breakdown
 The order of work, what depends on what, and what can proceed in parallel.
-Break it into a series of small, independently reviewable PRs rather than one
-mega-change — each should land and be revertable on its own.
+A table or numbered list with explicit depends-on beats a paragraph of
+ordering. Break it into a series of small, independently reviewable PRs
+rather than one mega-change — each should land and be revertable on its own.
 
 ## Rollout / flags / backout
 Feature flags, staged rollout, monitoring to watch, and how to turn it off.
@@ -52,7 +56,8 @@ Anything still unresolved that the implementer will hit.
 
 ## Common failure modes
 
-- **Hand-waved interfaces.** "It'll expose an endpoint for that" — which route, which method, what request and response shape? Vagueness here is where implementations diverge.
+- **Hand-waved interfaces.** "It'll expose an endpoint for that" — which route, which method, what request and response shape? Vagueness here is where implementations diverge. If it isn't a signature or a schema block, it isn't specified.
+- **Flow as a wall of text.** Hops the implementer has to reconstruct from prose. Draw the sequence.
 - **No test plan.** The spec describes building it but not proving it, so verification becomes an afterthought.
 - **No sequencing.** Without a PR breakdown the work arrives as one unreviewable mega-diff.
 - **Relitigating the design.** A spec that re-argues the approach is a design doc wearing the wrong hat — link the decision and move on.
