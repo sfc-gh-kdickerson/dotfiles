@@ -12,3 +12,4 @@
 
 **/flake.lock
 .nvim/
+**/__pycache__/
