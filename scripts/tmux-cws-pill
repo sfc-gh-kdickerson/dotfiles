@@ -29,6 +29,8 @@ ttl_fg="$text"
 ic_ttl_fg="$mauve"
 cert="/dev/shm/vault-ci-mtls-${USER-}.pem"
 if [[ -n "${USER-}" && -f "$cert" ]]; then
+    # File present but unreadable/unparseable: "?", not the same glyph as "no cert".
+    ttl="?"
     end=$(openssl x509 -in "$cert" -noout -enddate 2>/dev/null | cut -d= -f2) || true
     end_epoch=
     if [[ -n "${end:-}" ]]; then
@@ -41,7 +43,9 @@ if [[ -n "${USER-}" && -f "$cert" ]]; then
             ttl_fg="$red"
             ic_ttl_fg="$red"
         elif (( remain < 3600 )); then
-            ttl="$(printf '%dm' $((remain / 60)))"
+            mins=$((remain / 60))
+            (( mins < 1 )) && mins=1
+            ttl="$(printf '%dm' "$mins")"
             if (( remain < 1800 )); then
                 ttl_fg="$yellow"
                 ic_ttl_fg="$yellow"
