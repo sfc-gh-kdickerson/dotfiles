@@ -40,7 +40,7 @@ hold two snowmls.
 | Same repo twice (LoRA) | Combined tree for unique repos + one sidecar per alias: `sf wt create <slug>-snowml-client -r snowml:branch` |
 
 Older trees may differ (`/home/repo/wt-lora-*`, nested git worktrees, per-repo
-`gpu-sat-snowflake` names, notes in `snowbox-kdickerson/lora/`). Leave them.
+`gpu-sat-snowflake` names). Leave them. LoRA notes live in `projects/lora/`.
 
 ## Inputs
 
