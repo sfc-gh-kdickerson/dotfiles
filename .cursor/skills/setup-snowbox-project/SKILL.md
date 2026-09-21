@@ -27,6 +27,8 @@ Do not clone, and do not edit `/home/repo/<repo>` (that's main).
   AGENTS.md
   .gitignore                               # symlink names + .cursor/
   <link> -> /src/<wt>/<repo>
+~/.../snowbox-kdickerson/projects/archive/<slug>/
+  AGENTS.md                                # finished work; no live worktrees
 ```
 
 `<link>` is the repo directory (`snowflake`) unless the project needs more than
@@ -136,15 +138,21 @@ tree.
 
 ## Tear down
 
-Only when the user asks to remove a project. Destroy the combined tree **and**
-every sidecar (`<slug>-<link>`):
+Only when the user asks to remove a project.
+
+If the notes are worth keeping, move the folder to `projects/archive/<slug>/`,
+drop the worktree symlinks, then destroy the trees. Do not `rm -rf` the notes.
 
 ```bash
+mv /home/repo/snowbox-kdickerson/projects/<slug> \
+   /home/repo/snowbox-kdickerson/projects/archive/<slug>
+# unlink <link> names inside the archived folder
 sf worktree destroy <wt-name>
 sf worktree destroy <wt-name>-snowml-client
 # ...
-rm -rf /home/repo/snowbox-kdickerson/projects/<slug>
 ```
+
+Delete only when there is nothing to keep (`AGENTS.md` stub, stray zip).
 
 Leftover `/src/*` trees still hold Bazel caches; point at the bazel-cache-clean
 skill if disk is the follow-up.
@@ -155,7 +163,7 @@ skill if disk is the follow-up.
   symlink. For LoRA-style stacks that is `snowml-client`, not `snowml`.
 - Ignore symlink names and `.cursor/` in the project `.gitignore`. Track
   `AGENTS.md`.
-- No large artifacts in the project folder (disk-space already has a stray zip).
+- No large artifacts in the project folder.
 - `sf worktree rebase <wt-name>` updates an existing tree onto latest origin;
   rebase each sidecar separately; do not recreate to pull.
 - Destroy is the only dangerous step; do not `sf wt destroy` as part of setup.
