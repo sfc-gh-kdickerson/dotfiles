@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Cloud-workspace status island for tmux status-left:
+#   short id (first 4 of /etc/cloudws/workspace-metadata id) + sfid cert TTL
+# Silent on non-CWS hosts (Mac, etc.) so the item does not render.
+
+set -u
+
+meta=/etc/cloudws/workspace-metadata
+[[ -f "$meta" ]] || exit 0
+
+ws=$(awk -F'"' '/^[[:space:]]*"id":/{print substr($4,1,4); exit}' "$meta")
+[[ -n "$ws" ]] || exit 0
+
+opt() { tmux show -gv "$1" 2>/dev/null || echo "$2"; }
+
+base="$(opt @thm_base '#1e1e2e')"
+teal="$(opt @thm_teal '#94e2d5')"
+mauve="$(opt @thm_mauve '#cba6f7')"
+yellow="$(opt @thm_yellow '#f9e2af')"
+red="$(opt @thm_red '#f38ba8')"
+text="$(opt @thm_subtext_1 '#bac2de')"
+pill_l="$(opt @pill_l ' ')"
+pill_r="$(opt @pill_r ' ')"
+ic_cws="$(opt @ic_cws '󰅟')"
+ic_ttl="$(opt @ic_ttl '󰥔')"
+
+ttl="--"
+ttl_fg="$text"
+ic_ttl_fg="$mauve"
+cert="/dev/shm/vault-ci-mtls-${USER-}.pem"
+if [[ -n "${USER-}" && -f "$cert" ]]; then
+    end=$(openssl x509 -in "$cert" -noout -enddate 2>/dev/null | cut -d= -f2) || true
+    end_epoch=
+    if [[ -n "${end:-}" ]]; then
+        end_epoch=$(date -d "$end" +%s 2>/dev/null) || true
+    fi
+    if [[ -n "${end_epoch:-}" ]]; then
+        remain=$((end_epoch - $(date +%s)))
+        if (( remain <= 0 )); then
+            ttl="exp"
+            ttl_fg="$red"
+            ic_ttl_fg="$red"
+        elif (( remain < 3600 )); then
+            ttl="$(printf '%dm' $((remain / 60)))"
+            if (( remain < 1800 )); then
+                ttl_fg="$yellow"
+                ic_ttl_fg="$yellow"
+            fi
+        else
+            ttl="$(printf '%dh' $((remain / 3600)))"
+        fi
+    fi
+fi
+
+# Leading space keeps a gap after the session pill; omitted when this prints nothing.
+# [ 󰅟 b823  󰥔 10h ]
+printf ' #[bg=%s]%s#[fg=%s,bg=%s] %s #[fg=%s,bg=%s]%s #[fg=%s,bg=%s] %s #[fg=%s,bg=%s]%s #[bg=%s]%s#[bg=default]\n' \
+    "$base" "$pill_l" \
+    "$teal" "$base" "$ic_cws" \
+    "$text" "$base" "$ws" \
+    "$ic_ttl_fg" "$base" "$ic_ttl" \
+    "$ttl_fg" "$base" "$ttl" \
+    "$base" "$pill_r"
