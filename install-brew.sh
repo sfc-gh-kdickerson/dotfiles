@@ -48,6 +48,7 @@ brew install \
     sketchybar \
     stow \
     stylua \
+    sesh \
     tmux \
     tree \
     tree-sitter \

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Launcher for the Lua sesh-popup core (.config/sesh-popup).
+set -eu
+
+PATH="/opt/homebrew/bin:/usr/local/bin:${HOME}/go/bin:${HOME}/.nix-profile/bin:${PATH:-/usr/bin}"
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="${SOURCE_DIR}/${SOURCE}" ;;
+  esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+SELF="${SCRIPT_DIR}/$(basename "$SOURCE")"
+LIB="$(cd "${SCRIPT_DIR}/../.config/sesh-popup" && pwd)"
+
+LUA_BIN="$(command -v luajit || command -v lua || true)"
+if [ -z "$LUA_BIN" ]; then
+  tmux display-message -d 10000 "sesh-popup: luajit or lua not found" 2>/dev/null || true
+  echo "sesh-popup: luajit or lua not found" >&2
+  exit 1
+fi
+
+export SESH_POPUP_CMD="$SELF"
+export LUA_PATH="${LIB}/?.lua;${LIB}/?/init.lua;;"
+
+ERROR_LOG="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/sesh-popup.error"
+rm -f "$ERROR_LOG"
+if ! "$LUA_BIN" "${LIB}/main.lua" "$@" 2>"$ERROR_LOG"; then
+  error="$(tail -n 1 "$ERROR_LOG" 2>/dev/null || true)"
+  tmux display-message -d 10000 "sesh-popup: ${error:-picker failed}" 2>/dev/null || true
+  [ -n "$error" ] && printf '%s\n' "$error" >&2
+  exit 1
+fi

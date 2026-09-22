@@ -1,0 +1,3 @@
+# Hide floax's scratch session from the picker
+# (was @sessionx-filtered-sessions 'scratch').
+blacklist = ["scratch"]
