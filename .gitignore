@@ -6,6 +6,10 @@
 .config/cursor/statsig-cache.json
 .config/cursor/prompt_history.json
 .config/opencode/service.json
+.config/opencode/plugins/
+.config/opencode/skills/
+
+.local/
 
 .zshrc.d/work.sh
 .zshrc.d/ignored.sh
