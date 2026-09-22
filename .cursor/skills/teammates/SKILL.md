@@ -34,11 +34,9 @@ monorepo (login → real name confirmed via the GitHub users API).
 | Chaoguang Lin | Sr SWE, ML Platform / FDB Core | `WGYKPCVJT` | `chaoguang-lin_snow` | chaoguang.lin@snowflake.com |
 | Haoran Yu | SWE, AIML / ML Platform / ML | `U02C5HPR4BD` | `haoran-yu_snow` | haoran.yu@snowflake.com |
 | Sasank Chindirala | SWE, ML Platform | `U08QN81PVPA` | `sasank-chindirala_snow` | sasank.chindirala@snowflake.com |
-| Vivek Alamuri | SWE, ML Platform | `U08RXCAKGTY` | `vivek-alamuri_snow` | vivek.alamuri@snowflake.com |
 | Sherry Li | SWE, AIML / ML Platform | `U09ANJVNKFZ` | `sherry-li_snow` | sherry.li@snowflake.com |
 | Jack Douglas | SWE, AIML | `U09JUGAHS9K` | `jack-douglas_snow` | jack.douglas@snowflake.com |
 | Huy Ngo | SWE, ML Platform | `U0AHSD3U7NF` | `huy-ngo_snow` | huy.ngo@snowflake.com |
-| Satyam Goyal | SWE Intern, ML Platform | `U0ASHRJ4HHB` | `satyam-goyal_snow` | satyam.goyal@snowflake.com |
 
 ## Usage
 
