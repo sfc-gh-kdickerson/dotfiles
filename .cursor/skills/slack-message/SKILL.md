@@ -112,11 +112,9 @@ with `reportsto:"Pradeep Dorairaj"` and read each person's Slack ID from their p
 | Chaoguang Lin | `WGYKPCVJT` | Sr SWE, ML Platform / FDB Core |
 | Haoran Yu | `U02C5HPR4BD` | SWE, AIML / ML Platform / ML |
 | Sasank Chindirala | `U08QN81PVPA` | SWE, ML Platform |
-| Vivek Alamuri | `U08RXCAKGTY` | SWE, ML Platform |
 | Sherry Li | `U09ANJVNKFZ` | SWE, AIML / ML Platform |
 | Jack Douglas | `U09JUGAHS9K` | SWE, AIML |
 | Huy Ngo | `U0AHSD3U7NF` | SWE, ML Platform |
-| Satyam Goyal | `U0ASHRJ4HHB` | SWE Intern, ML Platform |
 
 ## Write like a person, not a bot
 
