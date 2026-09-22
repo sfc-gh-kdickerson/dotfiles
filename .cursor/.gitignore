@@ -1,0 +1,5 @@
+# If stow folds this tree into ~/.cursor, keep CLI runtime out of git.
+*
+!.gitignore
+!skills/
+!skills/**
