@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Format tmux-mem-cpu-load as one status island (sketchybar sysisland):
+#   cpu:  + integer percent (peach)
+#   mem: =/≡/≣ by usage band + percent (yellow)
+# Value turns red at >= 80%.
+
+set -u
+
+bin="${HOME}/.tmux/plugins/tmux-mem-cpu-load/tmux-mem-cpu-load"
+[[ -x "$bin" ]] || exit 0
+
+interval="$(tmux show -gv status-interval 2>/dev/null || echo 5)"
+# graph-lines 0 leaves a trailing NUL; strip it so bash doesn't warn on $().
+raw="$("$bin" --interval "$interval" --averages-count 0 --graph-lines 0 --mem-mode 2 | tr -d '\0' || true)"
+raw="${raw%%$'\n'}"
+[[ -n "$raw" ]] || exit 0
+
+# "42.01%  63.1%"
+mem_num="${raw%% *}"
+mem_num="${mem_num%\%}"
+cpu_num="${raw##* }"
+cpu_num="${cpu_num%\%}"
+mem="$(printf '%.1f%%' "$mem_num")"
+cpu="$(printf '%.0f%%' "$cpu_num")"
+mem_int="$(printf '%.0f' "$mem_num")"
+cpu_int="$(printf '%.0f' "$cpu_num")"
+
+# Same bands as ~/.config/sketchybar/plugins/ram.sh
+if (( mem_int < 50 )); then
+    ic_mem="="
+elif (( mem_int < 75 )); then
+    ic_mem="≡"
+else
+    ic_mem="≣"
+fi
+
+opt() { tmux show -gv "$1" 2>/dev/null || echo "$2"; }
+
+base="$(opt @thm_base '#1e1e2e')"
+yellow="$(opt @thm_yellow '#f9e2af')"
+peach="$(opt @thm_peach '#fab387')"
+red="$(opt @thm_red '#f38ba8')"
+text="$(opt @thm_subtext_1 '#bac2de')"
+pill_l="$(opt @pill_l ' ')"
+pill_r="$(opt @pill_r ' ')"
+ic_cpu="$(opt @ic_cpu '')"
+
+mem_fg="$text"
+cpu_fg="$text"
+(( mem_int >= 80 )) && mem_fg="$red"
+(( cpu_int >= 80 )) && cpu_fg="$red"
+
+# One shared @thm_base chip: [  66%  = 40.5% ]
+printf '#[bg=%s]%s#[fg=%s,bg=%s] %s #[fg=%s,bg=%s]%s #[fg=%s,bg=%s] %s #[fg=%s,bg=%s]%s #[bg=%s]%s#[bg=default]\n' \
+    "$base" "$pill_l" \
+    "$peach" "$base" "$ic_cpu" \
+    "$cpu_fg" "$base" "$cpu" \
+    "$yellow" "$base" "$ic_mem" \
+    "$mem_fg" "$base" "$mem" \
+    "$base" "$pill_r"

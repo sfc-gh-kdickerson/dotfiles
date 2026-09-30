@@ -37,6 +37,7 @@ brew install \
     lua \
     luajit \
     maven \
+    mermaid-cli \
     neovim \
     node \
     parallel \

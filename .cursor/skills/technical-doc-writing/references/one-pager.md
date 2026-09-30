@@ -29,8 +29,8 @@ What changes if this happens, quantified where you can. Why this is worth doing
 now rather than later.
 
 ## Alternatives (optional, one line each)
-The other options and why not. Even one line here answers the obvious question
-and shows you looked.
+The other options and why not. Two or more options: a tiny table, not three
+paragraphs. Even one line here answers the obvious question and shows you looked.
 
 ## Ask / next steps
 The decision or resources you need, and from whom, by when. Be specific — "I
@@ -41,7 +41,7 @@ need sign-off to spend two weeks on the spike" beats "thoughts?"
 
 - **Ask buried at the bottom, or missing.** Put what you want up top and make it a specific decision, not an open-ended "thoughts?"
 - **Solution with no problem.** If the reader doesn't feel the problem, the proposal has nothing to attach to.
-- **It grew into a design doc.** Over a page means you've picked the wrong format. Cut, or promote it to a design doc.
+- **It grew into a design doc.** Over a page means you've picked the wrong format. Cut, or promote it to a design doc. A three-row table is in budget; a mermaid architecture diagram is not — that belongs in the design doc.
 - **Unquantified impact.** "Improves performance" persuades no one; "cuts nightly job from 6h to 40m" does.
 
 ## What good looks like

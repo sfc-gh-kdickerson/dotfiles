@@ -15,16 +15,16 @@ enable-normalization-opposite-orientation-for-nested-containers = true
 PATH = '/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
 
 [gaps]
-inner.horizontal = 7
-inner.vertical =   7
-outer.left =       7
-outer.bottom =     7
-outer.right =      7
+inner.horizontal = 16
+inner.vertical =   16
+outer.left =       16
+outer.bottom =     16
+outer.right =      16
 outer.top = [
     { monitor."DELL S2721Q"    = 45 },
-    { monitor."DELL P2723DE"   = 40 }, 
-    { monitor."LS34A650U"      = 40 }, 
-    { monitor."^Built-in.*"    = 8  }, # built-in display (MacBook screen) 
+    { monitor."DELL P2723DE"   = 48 },
+    { monitor."LS34A650U"      = 50 },
+    { monitor."^Built-in.*"    = 16 }, # built-in display (MacBook screen)
     { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
     0                                  # should be unreachable but satisfies syntax
 ]
@@ -79,7 +79,7 @@ alt-r = 'mode resize'
 
 # app keybinds
 alt-g = ["exec-and-forget open -a 'Ghostty'"]
-alt-w = ["exec-and-forget open -a 'WezTerm'"]
+# alt-w = ["exec-and-forget open -a 'WezTerm'"]
 alt-m = ["exec-and-forget open -a 'Gmail'"]
 alt-c = ["exec-and-forget open -a 'Google Calendar'"]
 alt-b = ["exec-and-forget open -a 'Cursor'"]
