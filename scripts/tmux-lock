@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""tmux lock screensaver: matrix rain with a slow catppuccin rainbow.
+
+cmatrix -r re-rolls every glyph every frame. Here each falling stream keeps
+one color until it ends, then the next stream picks a new one.
+"""
+from __future__ import annotations
+
+import curses
+import random
+import sys
+
+# Kitty Catppuccin Mocha remaps these ANSI slots.
+RAIN = (
+    curses.COLOR_GREEN,
+    curses.COLOR_BLUE,
+    curses.COLOR_CYAN,
+    curses.COLOR_MAGENTA,
+    curses.COLOR_YELLOW,
+    curses.COLOR_RED,
+)
+HEAD_PAIR = len(RAIN) + 1
+TICK_MS = 40
+CHAR_MIN, CHAR_MAX = 33, 126
+
+
+def glyph() -> str:
+    return chr(random.randint(CHAR_MIN, CHAR_MAX))
+
+
+class Column:
+    def __init__(self, height: int) -> None:
+        self.reset(height, delay=True)
+
+    def reset(self, height: int, delay: bool = False) -> None:
+        self.color = random.randrange(len(RAIN)) + 1
+        self.length = random.randint(3, max(3, height - 1))
+        self.y = -1
+        self.gap = random.randint(1, height) if delay else random.randint(0, height // 2)
+        self.speed = random.randint(1, 3)
+        self.tick = 0
+        self.cells: list[str] = []
+
+    def step(self, height: int) -> None:
+        self.tick += 1
+        if self.tick < self.speed:
+            return
+        self.tick = 0
+        if self.gap > 0:
+            self.gap -= 1
+            return
+        self.cells.append(glyph())
+        if len(self.cells) > self.length:
+            self.cells.pop(0)
+        self.y += 1
+        if self.y - self.length >= height:
+            self.reset(height)
+
+    def draw(self, stdscr: curses.window, x: int, height: int, width: int) -> None:
+        if x >= width:
+            return
+        head_row = self.y
+        start = head_row - len(self.cells) + 1
+        last = len(self.cells) - 1
+        for i, ch in enumerate(self.cells):
+            y = start + i
+            if y < 0 or y >= height:
+                continue
+            pair = HEAD_PAIR if i == last else self.color
+            attr = curses.color_pair(pair)
+            if i == last or i % 2 == 0:
+                attr |= curses.A_BOLD
+            try:
+                stdscr.addstr(y, x, ch, attr)
+            except curses.error:
+                pass
+
+
+def draw(stdscr: curses.window) -> None:
+    curses.curs_set(0)
+    curses.use_default_colors()
+    stdscr.nodelay(True)
+    if curses.has_colors():
+        for i, color in enumerate(RAIN, start=1):
+            curses.init_pair(i, color, -1)
+        curses.init_pair(HEAD_PAIR, curses.COLOR_WHITE, -1)
+
+    height, width = stdscr.getmaxyx()
+    cols = [Column(height) for _ in range(max(1, width // 2))]
+
+    while True:
+        if stdscr.getch() != curses.ERR:
+            return
+        new_h, new_w = stdscr.getmaxyx()
+        if (new_h, new_w) != (height, width):
+            height, width = new_h, new_w
+            cols = [Column(height) for _ in range(max(1, width // 2))]
+        stdscr.erase()
+        for x, col in enumerate(cols):
+            col.step(height)
+            col.draw(stdscr, x * 2, height, width)
+        stdscr.refresh()
+        curses.napms(TICK_MS)
+
+
+def main() -> int:
+    if not sys.stdin.isatty():
+        return 1
+    try:
+        curses.wrapper(draw)
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
