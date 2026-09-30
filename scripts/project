@@ -1,0 +1,789 @@
+#!/usr/bin/env python3
+"""Snowbox project CLI: sf overlay worktrees + tracked project.json."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+SNOWBOX = Path(os.environ.get("SNOWBOX", "/home/repo/snowbox-kdickerson"))
+PROJECTS = Path(os.environ.get("PROJECTS", str(SNOWBOX / "projects")))
+ARCHIVE = PROJECTS / "archive"
+REPO_ROOT = Path(os.environ.get("REPO_ROOT", "/home/repo"))
+SF = os.environ.get("SF", "/usr/local/bin/sf")
+SFWT = Path("/home/sfwt")
+
+SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+IDENT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+
+MANIFEST = "project.json"
+
+
+def norm_slug(slug: str) -> str:
+    return slug.strip().lower()
+
+
+class Error(Exception):
+    def __init__(self, message: str, code: int = 1) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def die(message: str, code: int = 1) -> None:
+    raise Error(message, code)
+
+
+def log(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def run(
+    argv: list[str],
+    *,
+    cwd: Path | None = None,
+    check: bool = True,
+) -> str:
+    proc = subprocess.run(
+        argv,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+    )
+    if check and proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        die(err or "failed: " + " ".join(argv))
+    return (proc.stdout or "").strip()
+
+
+def parse_spec(spec: str) -> dict[str, Any]:
+    if not spec:
+        die("invalid spec: empty", 2)
+    aliased = "=" in spec
+    if aliased:
+        link, rest = spec.split("=", 1)
+    else:
+        link, rest = "", spec
+    if not rest:
+        die("invalid spec: " + spec, 2)
+    if ":" in rest:
+        repo_part, branch = rest.split(":", 1)
+        if not branch:
+            die("invalid spec: " + spec, 2)
+    else:
+        repo_part, branch = rest, None
+    repo = repo_part.rsplit("/", 1)[-1]
+    if not link:
+        link = repo
+    if not repo or not IDENT_RE.match(link):
+        die("invalid spec: " + spec, 2)
+    src = REPO_ROOT / repo
+    if not ((src / ".git").exists()):
+        die("no clone at %s — clone into %s first" % (src, REPO_ROOT))
+    return {
+        "link": link,
+        "repo": repo,
+        "branch": branch,
+        "aliased": aliased,
+    }
+
+
+def infer_graphite(branch: str | None) -> dict[str, str] | None:
+    if not branch:
+        return None
+    parts = branch.split("/")
+    if len(parts) < 3:
+        return None
+    return {"trunk": "main", "stack": "/".join(parts[:-1])}
+
+
+def dump_json(path: Path, obj: Any) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2) + "\n")
+    tmp.replace(path)
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        die("cannot read %s: %s" % (path, exc))
+    if not isinstance(data, dict):
+        die("%s is not a JSON object" % path)
+    return data
+
+
+def sf_list() -> list[dict[str, Any]]:
+    raw = run([SF, "worktree", "list", "--json"], check=False)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return data
+
+
+def wt_exists(name: str) -> bool:
+    for row in sf_list():
+        if row.get("Name") == name:
+            return True
+    return (SFWT / name / "state.json").is_file()
+
+
+def ensure_worktree(name: str, repos: list[str]) -> None:
+    if wt_exists(name):
+        log("reusing existing worktree: " + name)
+        return
+    argv = [SF, "worktree", "create", name]
+    for repo in repos:
+        argv.extend(["-r", repo])
+    log("creating worktree: " + " ".join(argv))
+    run(argv)
+
+
+def sf_path(name: str, repo: str) -> Path:
+    out = run([SF, "worktree", "path", name, repo])
+    path = Path(out)
+    if not path.is_dir():
+        die("worktree path missing for %s/%s: %s" % (name, repo, path))
+    return path
+
+
+def stack_target(stack: dict[str, Any]) -> Path | None:
+    backing = stack.get("backing")
+    if backing:
+        path = Path(backing)
+        return path if path.exists() else None
+    name = stack.get("worktree")
+    repo = stack.get("repo")
+    if not name or not repo:
+        return None
+    if not wt_exists(name):
+        return None
+    try:
+        return sf_path(name, repo)
+    except Error:
+        return None
+
+
+def current_branch(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    out = run(["git", "-C", str(path), "branch", "--show-current"], check=False)
+    return out or None
+
+
+def checkout_branch(path: Path, branch: str) -> None:
+    remote = "refs/remotes/origin/" + branch
+    fetch = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(path),
+            "fetch",
+            "origin",
+            "+refs/heads/%s:%s" % (branch, remote),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    checked = subprocess.run(
+        ["git", "-C", str(path), "checkout", branch],
+        capture_output=True,
+        text=True,
+    )
+    if checked.returncode == 0:
+        return
+    if fetch.returncode != 0:
+        err = (fetch.stderr or fetch.stdout or "").strip()
+        die(
+            "cannot checkout %s in %s (fetch failed%s)"
+            % (branch, path, ": " + err if err else "")
+        )
+    run(["git", "-C", str(path), "checkout", "-B", branch, remote])
+
+
+def force_symlink(target: Path, link: Path) -> None:
+    if link.is_symlink() or link.is_file():
+        link.unlink()
+    elif link.exists():
+        die("refusing to replace non-symlink %s" % link)
+    link.symlink_to(target)
+
+
+def ensure_ignore(gitignore: Path, line: str) -> None:
+    existing = gitignore.read_text() if gitignore.exists() else ""
+    lines = existing.splitlines()
+    if line not in lines:
+        with gitignore.open("a") as fh:
+            if existing and not existing.endswith("\n"):
+                fh.write("\n")
+            fh.write(line + "\n")
+
+
+def write_agents_stub(path: Path, slug: str, title: str, *, empty: bool) -> None:
+    if path.exists():
+        log("left existing " + str(path))
+        return
+    lines = [
+        "# " + title,
+        "",
+        "Cursor workspace is this directory. Inventory is [`project.json`](project.json).",
+        "",
+        "## Setup",
+        "",
+        "Delete this entire Setup section when the work below is done. Do not leave it.",
+        "",
+        "Do this before other work. Do not clone. Do not edit `/home/repo/<repo>`.",
+        "",
+        "### Scope",
+        "",
+        "Write what this project is for (one or two sentences), then fill **Where to",
+        "change** and **Do not touch**. No stack table — that is `project.json`.",
+    ]
+    if empty:
+        lines.extend(
+            [
+                "",
+                "### Worktrees",
+                "",
+                "No stacks yet. Add the repos this work needs:",
+                "",
+                "```bash",
+                "project add " + slug + " snowflake",
+                "project add " + slug + " snowml-client=snowml:kaleb/example/main",
+                "```",
+                "",
+                "- `repo[:branch]` — symlink `<repo>`, shares worktree `"
+                + slug
+                + "` with other unaliased repos while that tree does not exist yet",
+                "- `link=repo[:branch]` — symlink `<link>`, own worktree `"
+                + slug
+                + "-<link>` (second checkout of the same repo)",
+                "- `:branch` is a git checkout after create. `--wt-name` only to attach an existing tree (`lora-gs`).",
+                "- Once the shared worktree exists, extra unaliased repos are refused; alias them.",
+                "- `sf wt create` can take minutes (`block_until_ms` ≥ 180000).",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Where to change",
+            "",
+            "- TODO",
+            "",
+            "## Do not touch",
+            "",
+            "- `/home/repo/<repo>` (those stay on main)",
+            "- Do not invent `sf wt` lines.",
+            "",
+            "## Keep this file high-level",
+            "",
+            "Durable investigation notes stay out of this file.",
+            "",
+        ]
+    )
+    path.write_text("\n".join(lines))
+    log("wrote %s" % path)
+
+
+def project_dir_for(slug: str, *, archived: bool | None = None) -> Path:
+    live = PROJECTS / slug
+    archived_path = ARCHIVE / slug
+    live_hit = (live / MANIFEST).is_file()
+    arch_hit = (archived_path / MANIFEST).is_file()
+    if archived is True:
+        return archived_path
+    if archived is False:
+        return live
+    if live_hit and arch_hit:
+        die("slug %s exists in both projects/ and archive/" % slug)
+    if arch_hit:
+        return archived_path
+    return live
+
+
+def load_project(slug: str) -> tuple[Path, dict[str, Any]]:
+    path = project_dir_for(slug) / MANIFEST
+    if not path.is_file():
+        die("no project.json for " + slug)
+    data = load_json(path)
+    data.setdefault("slug", slug)
+    data.setdefault("status", "archived" if ARCHIVE in path.parents else "active")
+    data.setdefault("stacks", [])
+    data.setdefault("title", slug)
+    return path.parent, data
+
+
+def iter_manifests(*, active_only: bool = False) -> list[tuple[Path, dict[str, Any]]]:
+    found: list[tuple[Path, dict[str, Any]]] = []
+    roots = [PROJECTS]
+    if not active_only:
+        roots.append(ARCHIVE)
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            if child.name == "archive" and root == PROJECTS:
+                continue
+            manifest = child / MANIFEST
+            if not manifest.is_file():
+                continue
+            data = load_json(manifest)
+            data.setdefault("slug", child.name)
+            default_status = "archived" if root == ARCHIVE else "active"
+            data.setdefault("status", default_status)
+            data.setdefault("stacks", [])
+            data.setdefault("title", child.name)
+            if active_only and data.get("status") != "active":
+                continue
+            found.append((child, data))
+    return found
+
+
+def worktrees_owned_elsewhere(slug: str) -> set[str]:
+    owned: set[str] = set()
+    for path, data in iter_manifests(active_only=True):
+        other = data.get("slug", path.name)
+        if other == slug:
+            continue
+        for stack in data.get("stacks", []):
+            if stack.get("backing"):
+                continue
+            name = stack.get("worktree")
+            if name:
+                owned.add(name)
+    return owned
+
+
+def assign_worktrees(
+    specs: list[dict[str, Any]],
+    wt_name: str,
+    *,
+    shared_exists: bool,
+) -> None:
+    unaliased_repos = [s["repo"] for s in specs if not s["aliased"]]
+    if unaliased_repos:
+        if shared_exists:
+            die(
+                "cannot attach repos onto existing worktree %s; "
+                "alias extra checkouts: link=repo[:branch]" % wt_name
+            )
+        ensure_worktree(wt_name, unaliased_repos)
+        for spec in specs:
+            if not spec["aliased"]:
+                spec["worktree"] = wt_name
+    created: set[str] = set()
+    for spec in specs:
+        if not spec["aliased"]:
+            continue
+        name = "%s-%s" % (wt_name, spec["link"])
+        spec["worktree"] = name
+        if name not in created:
+            ensure_worktree(name, [spec["repo"]])
+            created.add(name)
+
+
+def wire_stack(project_dir: Path, stack: dict[str, Any], *, checkout: bool) -> Path:
+    link = project_dir / stack["link"]
+    backing = stack.get("backing")
+    if backing:
+        target = Path(backing)
+        if not target.exists():
+            die("backing missing for %s: %s" % (stack["link"], target))
+    else:
+        name = stack.get("worktree")
+        repo = stack.get("repo")
+        if not name or not repo:
+            die("stack %s has neither worktree nor backing" % stack.get("link"))
+        target = sf_path(name, repo)
+    force_symlink(target, link)
+    ensure_ignore(project_dir / ".gitignore", stack["link"])
+    ensure_ignore(project_dir / ".gitignore", ".cursor/")
+    branch = stack.get("branch")
+    if checkout and branch:
+        checkout_branch(target, branch)
+    live = current_branch(target)
+    if live:
+        stack["branch"] = live
+    return target
+
+
+def stacks_from_specs(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stacks = []
+    for spec in specs:
+        row: dict[str, Any] = {
+            "link": spec["link"],
+            "repo": spec["repo"],
+            "worktree": spec["worktree"],
+        }
+        if spec.get("branch"):
+            row["branch"] = spec["branch"]
+            inferred = infer_graphite(spec["branch"])
+            if inferred:
+                row["graphite"] = inferred
+        stacks.append(row)
+    return stacks
+
+
+def cmd_new(args: argparse.Namespace) -> None:
+    slug = norm_slug(args.slug)
+    if not SLUG_RE.match(slug):
+        die("project slug must be kebab-case (got: %s)" % slug, 2)
+    wt_name = args.wt_name or slug
+    if not IDENT_RE.match(wt_name):
+        die("worktree name must be a simple identifier (got: %s)" % wt_name, 2)
+
+    project_dir = PROJECTS / slug
+    if (project_dir / MANIFEST).is_file() or (ARCHIVE / slug / MANIFEST).is_file():
+        die("project already exists: " + slug)
+
+    specs = [parse_spec(s) for s in (args.specs or [])]
+    seen: set[str] = set()
+    for spec in specs:
+        if spec["link"] in seen:
+            die("duplicate symlink %s" % spec["link"], 2)
+        seen.add(spec["link"])
+
+    if specs:
+        if not os.access(SF, os.X_OK):
+            die("sf CLI not found at " + SF)
+        if not REPO_ROOT.is_dir():
+            die("repo root missing: " + str(REPO_ROOT))
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    stacks: list[dict[str, Any]] = []
+    if specs:
+        assign_worktrees(specs, wt_name, shared_exists=False)
+        stacks = stacks_from_specs(specs)
+        log("project: " + str(project_dir))
+        log("links:")
+        for stack in stacks:
+            target = wire_stack(project_dir, stack, checkout=True)
+            log("  %s -> %s  (%s)" % (stack["link"], target, stack.get("worktree", "")))
+    else:
+        log("empty project: " + str(project_dir))
+
+    ensure_ignore(project_dir / ".gitignore", ".cursor/")
+    title = args.title or slug
+    dump_json(
+        project_dir / MANIFEST,
+        {
+            "slug": slug,
+            "title": title,
+            "status": "active",
+            "stacks": stacks,
+        },
+    )
+    write_agents_stub(project_dir / "AGENTS.md", slug, title, empty=not specs)
+
+
+def cmd_add(args: argparse.Namespace) -> None:
+    args.slug = norm_slug(args.slug)
+    project_dir, data = load_project(args.slug)
+    if data.get("status") != "active":
+        die("cannot add stacks to archived project " + args.slug)
+    specs = [parse_spec(s) for s in args.specs]
+    existing_links = {s["link"] for s in data["stacks"]}
+    for spec in specs:
+        if spec["link"] in existing_links:
+            die("duplicate symlink %s" % spec["link"], 2)
+    wt_name = args.wt_name or args.slug
+    unaliased = [s for s in specs if not s["aliased"]]
+    if unaliased and wt_exists(wt_name):
+        die(
+            "cannot attach repos onto existing worktree %s; "
+            "alias extra checkouts: link=repo[:branch]" % wt_name
+        )
+    assign_worktrees(specs, wt_name, shared_exists=wt_exists(wt_name))
+    new_stacks = stacks_from_specs(specs)
+    log("project: " + str(project_dir))
+    log("links:")
+    for stack in new_stacks:
+        target = wire_stack(project_dir, stack, checkout=True)
+        log("  %s -> %s  (%s)" % (stack["link"], target, stack.get("worktree", "")))
+        data["stacks"].append(stack)
+    dump_json(project_dir / MANIFEST, data)
+
+
+def snapshot_project(project_dir: Path, data: dict[str, Any]) -> bool:
+    changed = False
+    for stack in data.get("stacks", []):
+        link = project_dir / stack["link"]
+        if not link.exists():
+            continue
+        live = current_branch(link)
+        if live and stack.get("branch") != live:
+            stack["branch"] = live
+            changed = True
+    return changed
+
+
+def cmd_snapshot(args: argparse.Namespace) -> None:
+    if args.slug:
+        args.slug = norm_slug(args.slug)
+        rows = [load_project(args.slug)]
+    else:
+        rows = iter_manifests(active_only=True)
+    if not rows:
+        die("no active projects")
+    for project_dir, data in rows:
+        if snapshot_project(project_dir, data):
+            dump_json(project_dir / MANIFEST, data)
+            log("updated " + str(project_dir / MANIFEST))
+        else:
+            log("unchanged " + data.get("slug", project_dir.name))
+
+
+def group_sf_repos(stacks: list[dict[str, Any]]) -> dict[str, list[str]]:
+    grouped: dict[str, list[str]] = {}
+    for stack in stacks:
+        if stack.get("backing"):
+            continue
+        name = stack.get("worktree")
+        repo = stack.get("repo")
+        if not name or not repo:
+            continue
+        grouped.setdefault(name, [])
+        if repo not in grouped[name]:
+            grouped[name].append(repo)
+    return grouped
+
+
+def relink_project(project_dir: Path, data: dict[str, Any]) -> None:
+    grouped = group_sf_repos(data.get("stacks", []))
+    for name, repos in grouped.items():
+        ensure_worktree(name, repos)
+    log("project: " + str(project_dir))
+    for stack in data.get("stacks", []):
+        backing = stack.get("backing")
+        if backing and not Path(backing).exists():
+            log("skip %s: backing missing %s" % (stack["link"], backing))
+            continue
+        target = wire_stack(project_dir, stack, checkout=True)
+        log("  %s -> %s" % (stack["link"], target))
+    dump_json(project_dir / MANIFEST, data)
+
+
+def cmd_relink(args: argparse.Namespace) -> None:
+    if args.slug:
+        args.slug = norm_slug(args.slug)
+        rows = [load_project(args.slug)]
+        if rows[0][1].get("status") != "active":
+            die("refusing to relink archived project " + args.slug)
+    else:
+        rows = iter_manifests(active_only=True)
+    if not rows:
+        die("no active projects")
+    for project_dir, data in rows:
+        relink_project(project_dir, data)
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    rows = iter_manifests(active_only=False)
+    errors = 0
+    infos = 0
+
+    def err(msg: str) -> None:
+        nonlocal errors
+        errors += 1
+        print("error: " + msg)
+
+    def info(msg: str) -> None:
+        nonlocal infos
+        infos += 1
+        print("info: " + msg)
+
+    if not rows:
+        print("no projects")
+        return
+    listed = {row.get("Name") for row in sf_list()}
+    for project_dir, data in rows:
+        slug = data.get("slug", project_dir.name)
+        status = data.get("status", "active")
+        archived = status == "archived"
+        gitignore = project_dir / ".gitignore"
+        ignored = set(gitignore.read_text().splitlines()) if gitignore.exists() else set()
+        for stack in data.get("stacks", []):
+            link_name = stack.get("link", "")
+            link = project_dir / link_name
+            if link_name not in ignored:
+                err("%s: .gitignore missing %s" % (slug, link_name))
+            if archived:
+                if link.exists() or link.is_symlink():
+                    err("%s: archived but %s still present" % (slug, link_name))
+                continue
+            expected = stack_target(stack)
+            backing = stack.get("backing")
+            wt = stack.get("worktree")
+            repo = stack.get("repo")
+            if backing:
+                if not Path(backing).exists():
+                    err("%s: backing missing %s -> %s" % (slug, link_name, backing))
+                    continue
+            elif wt:
+                if wt not in listed and not (SFWT / wt / "state.json").is_file():
+                    err("%s: worktree %s not in sf wt list" % (slug, wt))
+                if expected is None:
+                    err("%s: cannot resolve %s (%s/%s)" % (slug, link_name, wt, repo))
+                    continue
+            else:
+                err("%s: stack %s has no worktree or backing" % (slug, link_name))
+                continue
+            if not link.exists() and not link.is_symlink():
+                err("%s: missing link %s" % (slug, link_name))
+                continue
+            if not link.is_symlink():
+                err("%s: %s is not a symlink" % (slug, link_name))
+                continue
+            actual = Path(os.path.realpath(link))
+            want = Path(os.path.realpath(expected)) if expected else None
+            if want and actual != want:
+                err("%s: %s -> %s (expected %s)" % (slug, link_name, actual, want))
+            live = current_branch(link)
+            recorded = stack.get("branch")
+            if live and recorded and live != recorded:
+                info("%s: %s HEAD %s (recorded %s)" % (slug, link_name, live, recorded))
+            gstack = (stack.get("graphite") or {}).get("stack")
+            if live and gstack and live != gstack and not live.startswith(gstack + "/"):
+                info(
+                    "%s: %s HEAD %s is not on graphite stack %s"
+                    % (slug, link_name, live, gstack)
+                )
+        if ".cursor/" not in ignored:
+            err("%s: .gitignore missing .cursor/" % slug)
+    print("%d error(s), %d info" % (errors, infos))
+    if errors:
+        sys.exit(1)
+
+
+def cmd_archive(args: argparse.Namespace) -> None:
+    args.slug = norm_slug(args.slug)
+    project_dir, data = load_project(args.slug)
+    if data.get("status") == "archived" and project_dir.parent == ARCHIVE:
+        die("already archived: " + args.slug)
+    dest = ARCHIVE / args.slug
+    if dest.exists():
+        die("archive destination exists: " + str(dest))
+    ARCHIVE.mkdir(parents=True, exist_ok=True)
+    for stack in data.get("stacks", []):
+        link = project_dir / stack["link"]
+        if link.is_symlink() or link.is_file():
+            link.unlink()
+            log("unlinked " + str(link))
+    shared = worktrees_owned_elsewhere(args.slug)
+    seen: set[str] = set()
+    for stack in data.get("stacks", []):
+        if stack.get("backing"):
+            continue
+        name = stack.get("worktree")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        if name in shared:
+            log("leaving worktree %s (still used by another project)" % name)
+            continue
+        if wt_exists(name):
+            log("destroying worktree: " + name)
+            run([SF, "worktree", "destroy", name, "-y"])
+        else:
+            log("worktree already gone: " + name)
+    data["status"] = "archived"
+    dump_json(project_dir / MANIFEST, data)
+    shutil.move(str(project_dir), str(dest))
+    log("archived " + str(dest))
+
+
+def project_public(project_dir: Path, data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "slug": data.get("slug", project_dir.name),
+        "title": data.get("title", project_dir.name),
+        "status": data.get("status", "active"),
+        "path": str(project_dir),
+        "stacks": data.get("stacks", []),
+    }
+
+
+def cmd_list(args: argparse.Namespace) -> None:
+    rows = [
+        project_public(path, data)
+        for path, data in iter_manifests(active_only=True)
+    ]
+    if args.json:
+        json.dump(rows, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return
+    if not rows:
+        return
+    width = max(len(row["slug"]) for row in rows)
+    for row in rows:
+        print("%-*s  %s" % (width, row["slug"], row["title"]))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="project",
+        description="Manage snowbox projects (sf overlay worktrees + project.json).",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_new = sub.add_parser("new", help="create a project (empty unless specs given)")
+    p_new.add_argument("--wt-name", help="sf worktree name (default: slug)")
+    p_new.add_argument("--title", help="human title (default: slug)")
+    p_new.add_argument("slug")
+    p_new.add_argument(
+        "specs",
+        nargs="*",
+        help="repo[:branch] or link=repo[:branch]; omit for an empty project",
+    )
+    p_new.set_defaults(func=cmd_new)
+
+    p_add = sub.add_parser("add", help="add a stack to an existing project")
+    p_add.add_argument("--wt-name", help="override sidecar prefix")
+    p_add.add_argument("slug")
+    p_add.add_argument("specs", nargs="+")
+    p_add.set_defaults(func=cmd_add)
+
+    p_snap = sub.add_parser("snapshot", help="record live HEADs into project.json")
+    p_snap.add_argument("slug", nargs="?")
+    p_snap.set_defaults(func=cmd_snapshot)
+
+    p_relink = sub.add_parser("relink", help="create missing trees and restore symlinks")
+    p_relink.add_argument("slug", nargs="?")
+    p_relink.set_defaults(func=cmd_relink)
+
+    p_doctor = sub.add_parser("doctor", help="check links against sf wt and project.json")
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    p_archive = sub.add_parser("archive", help="destroy trees, keep notes")
+    p_archive.add_argument("slug")
+    p_archive.set_defaults(func=cmd_archive)
+
+    p_list = sub.add_parser("list", help="list active projects")
+    p_list.add_argument("--json", action="store_true")
+    p_list.set_defaults(func=cmd_list)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        args.func(args)
+    except Error as exc:
+        print(exc, file=sys.stderr)
+        return exc.code
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
