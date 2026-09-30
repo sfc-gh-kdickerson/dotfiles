@@ -1,25 +1,46 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // Snowflake AI Gateway (SNOWFLAKE) on snowhouse. Model IDs match
-  // voltron-config/configs/prod/models. OpenCode 2.0 schema: providers/settings/agents.
+  // Snowflake AI Gateway (SNOWFLAKE) on snowhouse.
+  // DESCRIBE AI GATEWAY SNOWFLAKE is models: [{name: '*'}] — this map is the
+  // known-working set, not the public Cortex AI_COMPLETE table (those IDs 400).
   // Claude goes through /v1/messages; everything else through /v1/chat/completions.
-  "model": "snowflake-cortex/glm-5.3",
-  "default_agent": "light",
+  "model": "snowflake-cortex/grok-4.6",
+  "small_model": "snowflake-cortex/openai-gpt-5.6-luna#none",
+  "default_agent": "build",
+  "enabled_providers": ["snowflake-anthropic", "snowflake-cortex"],
+  "disabled_providers": ["opencode"],
+  "experimental": {
+    "policies": [
+      { "effect": "deny", "action": "provider.use", "resource": "*" },
+      { "effect": "allow", "action": "provider.use", "resource": "snowflake-anthropic" },
+      { "effect": "allow", "action": "provider.use", "resource": "snowflake-cortex" }
+    ]
+  },
   "plugins": [
     "-opencode.models-dev",
     "-opencode.provider.*",
     "opencode.provider.snowflake-cortex"
   ],
+  // ~/.cursor/skills is a symlink; OpenCode treats that path as a file.
+  // Point at the real directory so SKILL.md files are discovered.
+  "skills": ["/home/repo/dotfiles/.cursor/skills"],
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "allow" },
+    { "action": "edit", "resource": "*", "effect": "allow" }
+  ],
   "providers": {
     "snowflake-anthropic": {
       "name": "Snowflake AI Gateway (Anthropic)",
-      "env": ["SNOWHOUSE_OAUTH_TOKEN"],
-      "package": "@opencode-ai/ai/providers/anthropic-compatible",
+      // anthropic-compatible is not in the binary import map; bun then
+      // looks up npm @opencode/ai and dies. Native anthropic is bundled.
+      // env[] is treated as apiKey → x-api-key, which the gateway 401s.
+      "package": "@opencode/ai/providers/anthropic",
       "settings": {
-        "baseURL": "https://snowhouse.snowflakecomputing.com/api/v2/aigateways/SNOWFLAKE",
-        "apiKey": "{env:SNOWHOUSE_OAUTH_TOKEN}"
+        "baseURL": "https://snowhouse.snowflakecomputing.com/api/v2/aigateways/SNOWFLAKE/v1",
+        "authToken": "{env:SNOWHOUSE_OAUTH_TOKEN}"
       },
       "headers": {
+        "Authorization": "Bearer {env:SNOWHOUSE_OAUTH_TOKEN}",
         "snow-agent-name": "opencode",
         "X-SNOWFLAKE-APPLICATION": "sf-ai-opencode"
       },
@@ -40,7 +61,7 @@
     "snowflake-cortex": {
       "name": "Snowflake AI Gateway (OpenAI)",
       "env": ["SNOWHOUSE_OAUTH_TOKEN"],
-      "package": "@opencode-ai/ai/providers/openai-compatible",
+      "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "https://snowhouse.snowflakecomputing.com/api/v2/aigateways/SNOWFLAKE/v1",
         "apiKey": "{env:SNOWHOUSE_OAUTH_TOKEN}"
@@ -50,9 +71,9 @@
         "X-SNOWFLAKE-APPLICATION": "sf-ai-opencode"
       },
       "models": {
-        // Gateway lists Claude on the OpenAI-compat /v1/models catalog too.
-        // Those IDs 503 on /chat/completions — use snowflake-anthropic instead.
+        // Claude over Chat Completions 503s — use snowflake-anthropic instead.
         "claude-fable-5": { "disabled": true },
+        "claude-fable-5-1": { "disabled": true },
         "claude-haiku-4-5": { "disabled": true },
         "claude-opus-4-5": { "disabled": true },
         "claude-opus-4-6": { "disabled": true },
@@ -154,13 +175,13 @@
             { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } }
           ]
         },
+        // Gateway: function tools + reasoning_effort ≠ none 400s on luna.
         "openai-gpt-5.6-luna": {
           "name": "GPT-5.6 Luna",
+          "reasoning": false,
+          "options": { "reasoningEffort": "none" },
           "variants": [
-            { "id": "low", "settings": { "reasoningEffort": "low" } },
-            { "id": "medium", "settings": { "reasoningEffort": "medium" } },
-            { "id": "high", "settings": { "reasoningEffort": "high" } },
-            { "id": "xhigh", "settings": { "reasoningEffort": "xhigh" } }
+            { "id": "none", "settings": { "reasoningEffort": "none" } }
           ]
         },
         "openai-gpt-5.6-sol": {
@@ -186,27 +207,31 @@
   },
   "agents": {
     "build": {
-      "model": "snowflake-cortex/openai-gpt-5.6-terra#high"
+      "model": "snowflake-cortex/grok-4.6",
+      "permissions": [
+        { "action": "shell", "resource": "*", "effect": "allow" },
+        { "action": "edit", "resource": "*", "effect": "allow" },
+        { "action": "subagent", "resource": "*", "effect": "allow" }
+      ]
     },
     "plan": {
-      "model": "snowflake-anthropic/claude-opus-5"
+      "model": "snowflake-anthropic/claude-opus-5",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "shell", "resource": "*", "effect": "ask" }
+      ]
     },
     "compaction": {
-      "model": "snowflake-cortex/openai-gpt-5.6-terra#low"
+      "model": "snowflake-cortex/openai-gpt-5.6-luna#none"
     },
     "explore": {
-      "model": "snowflake-cortex/openai-gpt-5.6-luna#low"
+      "model": "snowflake-cortex/openai-gpt-5.6-luna#none"
     },
     "summary": {
-      "model": "snowflake-cortex/openai-gpt-5.6-luna#low"
+      "model": "snowflake-cortex/openai-gpt-5.6-luna#none"
     },
     "title": {
-      "model": "snowflake-cortex/openai-gpt-5.6-luna#low"
-    },
-    "light": {
-      "mode": "primary",
-      "description": "Lightweight general-purpose agent for routine tasks.",
-      "model": "snowflake-cortex/glm-5.3"
+      "model": "snowflake-cortex/openai-gpt-5.6-luna#none"
     }
   },
   "mcp": {
