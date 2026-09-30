@@ -30,16 +30,18 @@ dest paths (`/home/repo/...`) keep hashes aligned.
 | `assistant-sessions.json` | `--resume` map once the plugin sees `agent` |
 | `~/.snowflake/connections.toml` | Connector profiles. Create writes a stub. |
 | `~/.snowflake/config.toml` | Snowflake CLI config. Create does not copy this. |
+| `~/.config/graphite/auth` | Graphite CLI token. |
 
 ## Never copy
 
-`auth.json`, `agent-tools`, `ai-tracking`, `~/.cursor-server`,
+Cursor `auth.json`, `agent-tools`, `ai-tracking`, `~/.cursor-server`,
 `~/.local/share/cursor-agent` binaries, `~/.claude`, caches,
 `~/.snowflake/pats.txt`, `~/.snowflake/logs/`, git working trees,
 historical continuum snapshots, `/src`.
 
-`connections.toml` and `config.toml` are the exception: copy them,
-chmod 600, do not print them, do not put them in git.
+`connections.toml`, `config.toml`, and `~/.config/graphite/auth` are
+the exception: the script copies them, chmod 600, do not print them,
+do not put them in git.
 
 ## Tmux resume wiring
 
