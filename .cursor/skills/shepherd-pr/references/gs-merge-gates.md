@@ -28,12 +28,13 @@ Inspect its check-run `output.summary`. Useful fields include:
 - whether a stale green was accepted;
 - `NO_PRECOMMIT_RUN` or acknowledgement-override presence.
 
-A green enforcer is authoritative even when the qualifying run came from a
-descendant stack PR or says `stale green accepted`. Do not spend resources
-starting another precommit merely because its build SHA differs from this PR.
+GitHub will accept a green enforcer from a stale SHA or a stack ancestor or
+descendant. **This shepherd does not.** Require a `snowflake--default-precommit`
+whose commit equals the current PR head, then inspect that build's failed
+tests, failed/broken jobs, and annotations for failures related to the PR
+diff. Do not treat enforcer SUCCESS or a passed test tally as that inspection.
 
-If the enforcer reports no qualifying terminal build, start a default
-precommit on the PR branch:
+If no current-head default-precommit is running or terminal, start:
 
 ```bash
 sf ci build start default-precommit -o json
@@ -138,9 +139,9 @@ PR `#507604` demonstrated the complete recovery loop:
   key while the flag was off violated parameter protection.
 - The correct final change restored key absence when disabled, updated the
   affected expectations accordingly, pushed a new head, and restarted merge.
-- Precommit-Enforcer passed from a descendant G6 default-precommit and
-  explicitly accepted stale green, so rerunning precommit for G5 was
-  unnecessary.
+- Precommit-Enforcer can pass from a descendant or stale-green run. That is
+  enough for GitHub; this shepherd still requires a default-precommit on the
+  current G5 head and an inspection for related failures.
 - An outdated AI blocker thread remained unresolved after its code issue became
   inactive. The shepherd must reply/resolve addressed threads and verify
   `isResolved=true`, including stale threads.
