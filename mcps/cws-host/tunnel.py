@@ -12,15 +12,16 @@ from __future__ import print_function
 import glob
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
 import time
 
 from lock import open_and_lock, pid_alive, read_lock_pid, state_dir
-from protocol import HOST_PORT, daemonize, eprint
+from protocol import HOST_PORT, daemonize, eprint, read_token
 
-READY_VERSION = "2"
+READY_VERSION = "3"
 
 
 def _ip_cache_path(workspace_id):
@@ -37,12 +38,16 @@ def workspace_ip(workspace_id, refresh=False):
                 return ip
         except OSError:
             pass
-    proc = subprocess.run(
-        ["sf", "ws", "show", workspace_id, "-o", "json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["sf", "ws", "show", workspace_id, "-o", "json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit("sf ws show %s timed out" % workspace_id)
     if proc.returncode != 0:
         raise SystemExit("sf ws show %s failed: %s" % (workspace_id, proc.stderr.strip()))
     rows = json.loads(proc.stdout)
@@ -57,44 +62,167 @@ def workspace_ip(workspace_id, refresh=False):
     raise SystemExit("sf ws show %s: no ip field" % workspace_id)
 
 
-def mux_sock(ip):
+def mux_socks(ip):
     matches = glob.glob(os.path.expanduser("~/.ssh/sfcli-socks/*@%s:8022" % ip))
-    if not matches:
-        return None
-    matches.sort(key=os.path.getmtime, reverse=True)
-    return matches[0]
+    dated = []
+    for path in matches:
+        try:
+            dated.append((os.path.getmtime(path), path))
+        except OSError:
+            continue
+    dated.sort(reverse=True)
+    return [path for _mtime, path in dated]
+
+
+def mux_sock(ip):
+    matches = mux_socks(ip)
+    return matches[0] if matches else None
 
 
 def mux_cmd(sock, *ctl):
     return ["ssh", "-O", ctl[0], *ctl[1:], "-S", sock, "dummy"]
 
 
-def apply_forward(sock, spec):
-    subprocess.run(mux_cmd(sock, "cancel", "-R", spec), capture_output=True)
-    proc = subprocess.run(mux_cmd(sock, "forward", "-R", spec), capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "ssh -O forward failed: %s %s" % (proc.stdout.strip(), proc.stderr.strip())
+def mux_alive(sock):
+    if not sock or not os.path.exists(sock):
+        return False
+    try:
+        proc = subprocess.run(mux_cmd(sock, "check"), capture_output=True, timeout=2)
+    except subprocess.TimeoutExpired:
+        return False
+    return proc.returncode == 0
+
+
+def drop_mux(sock):
+    """Kill a ControlMaster and remove a stale socket so the next holder is clean."""
+    if not sock:
+        return
+    try:
+        subprocess.run(mux_cmd(sock, "exit"), capture_output=True, timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.unlink(sock)
+    except OSError:
+        pass
+
+
+def mux_exec(sock, remote, timeout=6):
+    try:
+        return subprocess.run(
+            [
+                "ssh",
+                "-S",
+                sock,
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=3",
+                "dummy",
+                remote,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def remote_host_ok(sock, token):
+    """True when CWS:HOST_PORT already reaches the Mac host through this mux."""
+    if not sock or not token:
+        return False
+    remote = "curl -fsS -m 2 -H %s http://127.0.0.1:%d/health" % (
+        shlex.quote("Authorization: Bearer %s" % token),
+        HOST_PORT,
+    )
+    proc = mux_exec(sock, remote)
+    if proc is None or proc.returncode != 0:
+        return False
+    return '"ok"' in (proc.stdout or "")
+
+
+def apply_forward(sock, spec, token=None):
+    # If this mux already owns the reverse forward, a second -R fails with
+    # "listen port 18766". Cancelling it then racing a rebind is how connect
+    # used to spend minutes failing. Probe first; only cancel a dead bind.
+    if token and remote_host_ok(sock, token):
+        return
+    try:
+        proc = subprocess.run(
+            mux_cmd(sock, "forward", "-R", spec), capture_output=True, text=True, timeout=5
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ssh -O forward timed out")
+    if proc.returncode == 0:
+        return
+    if token and remote_host_ok(sock, token):
+        eprint("forward already up (listen port busy); leaving it")
+        return
+    cancel_forward(sock, spec)
+    time.sleep(1)
+    try:
+        proc = subprocess.run(
+            mux_cmd(sock, "forward", "-R", spec), capture_output=True, text=True, timeout=5
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ssh -O forward timed out")
+    if proc.returncode == 0:
+        return
+    if token and remote_host_ok(sock, token):
+        eprint("forward already up after rebind attempt; leaving it")
+        return
+    raise RuntimeError(
+        "ssh -O forward failed: %s %s" % (proc.stdout.strip(), proc.stderr.strip())
+    )
 
 
 def cancel_forward(sock, spec):
     if not sock:
         return
-    subprocess.run(mux_cmd(sock, "cancel", "-R", spec), capture_output=True)
+    try:
+        subprocess.run(mux_cmd(sock, "cancel", "-R", spec), capture_output=True, timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _socks_for_workspace(workspace_id):
+    try:
+        ip = workspace_ip(workspace_id)
+    except SystemExit as exc:
+        eprint(str(exc))
+        return None
+    return mux_socks(ip)
 
 
 def cancel_workspace(workspace_id):
     spec = "%d:127.0.0.1:%d" % (HOST_PORT, HOST_PORT)
+    socks = _socks_for_workspace(workspace_id)
+    if socks is None:
+        return 1
+    for sock in socks:
+        cancel_forward(sock, spec)
+        eprint("cancelled %s on %s" % (spec, sock))
+    return 0
+
+
+def drop_workspace_muxes(ip, spec):
+    for sock in mux_socks(ip):
+        cancel_forward(sock, spec)
+        drop_mux(sock)
+        eprint("tore down mux %s" % sock)
+
+
+def teardown_workspace(workspace_id):
+    spec = "%d:127.0.0.1:%d" % (HOST_PORT, HOST_PORT)
+    clear_ready(os.path.join(state_dir(), "tunnel-%s.ready" % workspace_id))
     try:
         ip = workspace_ip(workspace_id)
     except SystemExit as exc:
         eprint(str(exc))
         return 1
-    sock = mux_sock(ip)
-    cancel_forward(sock, spec)
-    if sock:
-        eprint("cancelled %s on %s" % (spec, sock))
+    drop_workspace_muxes(ip, spec)
     return 0
 
 
@@ -118,19 +246,25 @@ def start_holder(workspace_id):
     )
 
 
-def wait_sock(ip, timeout=20):
+def wait_sock(ip, timeout=12, should_stop=None):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        sock = mux_sock(ip)
-        if sock and os.path.exists(sock):
-            return sock
+        if should_stop and should_stop():
+            return None
+        for sock in mux_socks(ip):
+            if mux_alive(sock):
+                return sock
         time.sleep(0.2)
     return None
 
 
 def write_ready(path, spec):
-    with open(path, "w") as fh:
-        fh.write("%s %s\n" % (READY_VERSION, spec))
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        fh.write("%s %s %s\n" % (READY_VERSION, os.getpid(), spec))
+        # Older connect() grepped '^2 ' and recycled the daemon on miss.
+        fh.write("2 %s %s\n" % (os.getpid(), spec))
+    os.replace(tmp, path)
 
 
 def clear_ready(path):
@@ -160,6 +294,7 @@ def main(argv):
     workspace_id = None
     daemon = False
     cancel_only = False
+    teardown = False
     log_path = os.path.join(state_dir(), "tunnel.log")
     i = 1
     while i < len(argv):
@@ -170,6 +305,8 @@ def main(argv):
             daemon = True
         elif argv[i] == "--cancel-only":
             cancel_only = True
+        elif argv[i] == "--teardown":
+            teardown = True
         elif argv[i] == "--log":
             i += 1
             log_path = argv[i]
@@ -178,8 +315,10 @@ def main(argv):
             return 2
         i += 1
     if not workspace_id:
-        eprint("usage: tunnel.py --workspace ID [--daemon|--cancel-only]")
+        eprint("usage: tunnel.py --workspace ID [--daemon|--cancel-only|--teardown]")
         return 2
+    if teardown:
+        return teardown_workspace(workspace_id)
     if cancel_only:
         return cancel_workspace(workspace_id)
 
@@ -198,6 +337,8 @@ def main(argv):
 
     spec = "%d:127.0.0.1:%d" % (HOST_PORT, HOST_PORT)
     ready_path = os.path.join(state_dir(), "tunnel-%s.ready" % workspace_id)
+    clear_ready(ready_path)
+    token = read_token()
     ip = workspace_ip(workspace_id)
     stopping = {"done": False}
 
@@ -209,45 +350,67 @@ def main(argv):
 
     holder = None
     sock = None
+    miss_sleep = 1
+    fail_sleep = 1
+    last_ip_refresh = 0
     try:
         while not stopping["done"]:
             if holder is None or holder.poll() is not None:
+                if holder is not None and holder.poll() is not None:
+                    eprint("mux holder exited %s" % holder.returncode)
                 eprint("starting mux holder")
                 holder = start_holder(workspace_id)
-            sock = wait_sock(ip, timeout=20)
+            sock = wait_sock(ip, timeout=12, should_stop=lambda: stopping["done"])
             if sock is None:
-                eprint("mux socket never appeared; refreshing ip")
+                if stopping["done"]:
+                    break
+                eprint("mux socket never appeared")
                 stop_holder(holder)
                 holder = None
                 clear_ready(ready_path)
+                now = time.time()
+                if now - last_ip_refresh > 60:
+                    eprint("refreshing ip")
+                    last_ip_refresh = now
+                    try:
+                        ip = workspace_ip(workspace_id, refresh=True)
+                    except SystemExit as exc:
+                        eprint(str(exc))
+                time.sleep(miss_sleep)
+                miss_sleep = min(miss_sleep * 2, 30)
+                continue
+            miss_sleep = 1
+            if remote_host_ok(sock, token):
+                write_ready(ready_path, spec)
+            else:
                 try:
-                    ip = workspace_ip(workspace_id, refresh=True)
-                except SystemExit as exc:
+                    apply_forward(sock, spec, token)
+                except RuntimeError as exc:
                     eprint(str(exc))
-                time.sleep(1)
-                continue
-            try:
-                apply_forward(sock, spec)
-            except RuntimeError as exc:
-                eprint(str(exc))
-                clear_ready(ready_path)
-                time.sleep(1)
-                continue
-            write_ready(ready_path, spec)
-            eprint("forward %s on %s (holder pid=%s)" % (spec, sock, holder.pid))
+                    clear_ready(ready_path)
+                    time.sleep(fail_sleep)
+                    fail_sleep = min(fail_sleep * 2, 15)
+                    continue
+                write_ready(ready_path, spec)
+                eprint("forward %s on %s (holder pid=%s)" % (spec, sock, holder.pid))
+            fail_sleep = 1
+            misses = 0
             while not stopping["done"]:
-                time.sleep(0.5)
+                time.sleep(1)
                 if holder.poll() is not None:
                     eprint("mux holder exited %s" % holder.returncode)
-                    clear_ready(ready_path)
                     holder = None
-                    break
-                if not os.path.exists(sock):
-                    eprint("mux socket vanished; rebuilding")
                     clear_ready(ready_path)
-                    stop_holder(holder)
-                    holder = None
                     break
+                if mux_alive(sock):
+                    misses = 0
+                    continue
+                misses += 1
+                if misses < 3:
+                    continue
+                eprint("mux check failed; retrying forward without killing mux")
+                clear_ready(ready_path)
+                break
     finally:
         clear_ready(ready_path)
         cancel_forward(sock, spec)

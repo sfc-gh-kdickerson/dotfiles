@@ -51,7 +51,7 @@ _cws_host_tree_hash() {
 _cws_host_wait_pid_dead() {
   local pid="$1" i
   [[ -n "$pid" ]] || return 0
-  for i in {1..50}; do
+  for i in {1..80}; do
     kill -0 "$pid" 2>/dev/null || return 0
     sleep 0.1
   done
@@ -74,14 +74,14 @@ _cws_host_start_host() {
   state="$(_cws_host_state)"
   mkdir -p "$state"
   _cws_host_ensure_token
-  local_hash="$(_cws_host_tree_hash)"
+  local_hash="${1:-$(_cws_host_tree_hash)}"
   running="$(cat "${state}/host.sha" 2>/dev/null || true)"
   pid="$(cat "${state}/host.lock" 2>/dev/null || true)"
   if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && [[ "$local_hash" == "$running" ]] && _cws_host_host_healthy; then
     return 0
   fi
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && [[ "$local_hash" != "$running" ]]; then
-    print -r -- "cws-host: recycling host (tree changed)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    print -r -- "cws-host: recycling host"
     kill "$pid" 2>/dev/null || true
     _cws_host_wait_pid_dead "$pid"
   fi
@@ -135,35 +135,76 @@ fi
 cd \"\$dir\" || exit 1
 PYTHONPATH=. python3 facade.py --daemon --log \"\$dir/facade.log\" || exit 1
 PYTHONPATH=. python3 protocol.py upsert-mcp >/dev/null || exit 1
-curl -fsS http://127.0.0.1:18765/health >/dev/null || exit 1
+curl -fsS -m 3 http://127.0.0.1:18765/health >/dev/null || exit 1
 tmux attach || tmux new-session
 "
 }
 
-_cws_host_start_tunnel() {
-  local id="$1" src state pid i ready
-  src="$(_cws_host_src)" || return 1
+_cws_host_tunnel_ready() {
+  local id="$1" state ready pid
   state="$(_cws_host_state)"
   ready="${state}/tunnel-${id}.ready"
   pid="$(cat "${state}/tunnel-${id}.lock" 2>/dev/null || true)"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && grep -q '^2 ' "$ready" 2>/dev/null; then
-    return 0
-  fi
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    print -r -- "cws-host: tunnel pid ${pid} is stale (no ready file); recycling"
-    kill "$pid" 2>/dev/null || true
-    _cws_host_wait_pid_dead "$pid"
-  fi
-  PYTHONPATH="$src" python3 "${src}/tunnel.py" --workspace "$id" --daemon --log "${state}/tunnel-${id}.log" || return 1
-  for i in {1..80}; do
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null || return 1
+  grep -qE "^(3|2) ${pid} " "$ready" 2>/dev/null
+}
+
+_cws_host_wait_tunnel_ready() {
+  local id="$1" n="${2:-48}" i pid state seen=0
+  state="$(_cws_host_state)"
+  for ((i = 0; i < n; i++)); do
+    _cws_host_tunnel_ready "$id" && return 0
     pid="$(cat "${state}/tunnel-${id}.lock" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && grep -q '^2 ' "$ready" 2>/dev/null; then
-      return 0
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      seen=1
+    elif (( seen )); then
+      return 1
+    fi
+    if (( i > 0 && i % 16 == 0 )); then
+      print -r -- "cws-host: still waiting for tunnel (${id})"
     fi
     sleep 0.25
   done
-  print -r -- "connect: tunnel for ${id} did not stay up; see ${state}/tunnel-${id}.log" >&2
   return 1
+}
+
+_cws_host_teardown_tunnel() {
+  local id="$1" src
+  src="$(_cws_host_src)" || return 0
+  PYTHONPATH="$src" python3 "${src}/tunnel.py" --teardown --workspace "$id" || true
+}
+
+_cws_host_recycle_tunnel() {
+  local id="$1" state pid
+  state="$(_cws_host_state)"
+  pid="$(cat "${state}/tunnel-${id}.lock" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    print -r -- "cws-host: recycling tunnel pid ${pid}"
+    kill "$pid" 2>/dev/null || true
+    _cws_host_wait_pid_dead "$pid"
+  fi
+  _cws_host_teardown_tunnel "$id"
+}
+
+_cws_host_start_tunnel() {
+  local id="$1" src state pid
+  src="$(_cws_host_src)" || return 1
+  state="$(_cws_host_state)"
+  pid="$(cat "${state}/tunnel-${id}.lock" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && _cws_host_tunnel_ready "$id"; then
+    return 0
+  fi
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    PYTHONPATH="$src" python3 "${src}/tunnel.py" --workspace "$id" --daemon --log "${state}/tunnel-${id}.log" || return 1
+  else
+    print -r -- "cws-host: tunnel pid ${pid} not ready yet; waiting"
+  fi
+  if _cws_host_wait_tunnel_ready "$id"; then
+    return 0
+  fi
+  print -r -- "cws-host: tunnel not ready; entering anyway (Mac MCP may be down)" >&2
+  tail -n 8 "${state}/tunnel-${id}.log" >&2 || true
+  return 0
 }
 
 _cws_host_usage() {
@@ -209,9 +250,9 @@ connect() {
 
   _cws_host_ensure_token || return 1
   _cws_host_persist_workspace "$id"
-  _cws_host_start_host || return 1
-  _cws_host_start_tunnel "$id" || return 1
   hash="$(_cws_host_tree_hash)"
+  _cws_host_start_host "$hash" || return 1
+  _cws_host_start_tunnel "$id" || return 1
   _cws_host_enter "$id" "$hash" 0
   st=$?
   if [[ $st -eq 42 ]]; then
@@ -282,5 +323,5 @@ _cws_host_down() {
   else
     print -r -- "connect: no tunnel process for ${id}"
   fi
-  PYTHONPATH="$(_cws_host_src)" python3 "$(_cws_host_src)/tunnel.py" --cancel-only --workspace "$id" || true
+  PYTHONPATH="$(_cws_host_src)" python3 "$(_cws_host_src)/tunnel.py" --teardown --workspace "$id" || true
 }
