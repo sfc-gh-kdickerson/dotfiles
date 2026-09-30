@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+# Copy Cursor agent session store + tmux resurrect snapshot between CWS boxes.
+# Run from the Mac. Policy in git; blobs go over ssh/rsync. Never copies
+# Cursor auth.json.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: cws-handoff [--dry-run] [--all-chats] [--force] [--force-dirty] <old> [<new>]
+
+Probe (default when <new> is omitted, or with --dry-run):
+  sizes, cwd hashes from tmux last, worktrees, dirty/unpushed git checkouts.
+
+Copy (when <new> is given without --dry-run):
+  active-cwd chats (or all with --all-chats), agent-transcripts, plans,
+  tmux last + assistant-sessions.json, ~/.config/graphite/auth,
+  ~/.snowflake/connections.toml, ~/.snowflake/config.toml.
+
+Refuses a live copy while agents are running (--force) or while declared
+repos / extra worktrees / /src|wt-* checkouts are dirty or unpushed
+(--force-dirty). Does not commit or push. Does not use --from.
+Does not rsync $HOME.
+EOF
+}
+
+dry_run=0
+all_chats=0
+force=0
+force_dirty=0
+old=""
+new=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) dry_run=1; shift ;;
+    --all-chats) all_chats=1; shift ;;
+    --force) force=1; shift ;;
+    --force-dirty) force_dirty=1; shift ;;
+    -h | --help) usage; exit 0 ;;
+    --) shift; break ;;
+    -*) echo "cws-handoff: unknown flag: $1" >&2; usage >&2; exit 2 ;;
+    *)
+      if [[ -z "$old" ]]; then
+        old="$1"
+      elif [[ -z "$new" ]]; then
+        new="$1"
+      else
+        echo "cws-handoff: unexpected arg: $1" >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$old" ]]; then
+  usage >&2
+  exit 2
+fi
+
+if [[ -z "$new" ]]; then
+  dry_run=1
+fi
+
+ssh_ws() {
+  local ws="$1"
+  shift
+  ssh -o BatchMode=yes -o ConnectTimeout=15 "$ws" "$@"
+}
+
+rsync_ws() {
+  local src="$1" dest="$2"
+  # openrsync (macOS) cannot do remote-to-remote. Hop through a local temp dir.
+  if [[ "$src" == *:* && "$dest" == *:* ]]; then
+    local tmp
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/cws-handoff.XXXXXX")
+    if [[ "$src" == */ ]]; then
+      mkdir -p "$tmp/d"
+      rsync -a --partial -e "ssh -o BatchMode=yes" "$src" "$tmp/d/"
+      rsync -a --partial -e "ssh -o BatchMode=yes" "$tmp/d/" "$dest"
+    else
+      rsync -a --partial -e "ssh -o BatchMode=yes" "$src" "$tmp/"
+      rsync -a --partial -e "ssh -o BatchMode=yes" "$tmp/$(basename "$src")" "$dest"
+    fi
+    rm -rf "$tmp"
+  else
+    rsync -a --partial -e "ssh -o BatchMode=yes" "$src" "$dest"
+  fi
+}
+
+# Relative to $HOME. chmod 600. Skip if missing on old. Never prints contents.
+copy_home_file() {
+  local rel="$1"
+  if ! ssh_ws "$old" "test -f ~/$rel"; then
+    echo "skip ~/$rel (missing on $old)"
+    return 0
+  fi
+  echo "rsync ~/$rel"
+  ssh_ws "$new" "mkdir -p ~/$(dirname "$rel")"
+  rsync_ws "$old:$rel" "$new:$rel"
+  ssh_ws "$new" "chmod 600 ~/$rel"
+}
+
+if ! ssh_ws "$old" true; then
+  echo "cws-handoff: cannot ssh to $old (is the sfcli host alias up? try: sf ws ssh $old true)" >&2
+  exit 1
+fi
+
+if [[ -n "$new" && "$old" == "$new" ]]; then
+  echo "cws-handoff: old and new are the same workspace ($old)" >&2
+  exit 2
+fi
+
+if [[ -n "$new" ]] && ! ssh_ws "$new" true; then
+  echo "cws-handoff: cannot ssh to $new" >&2
+  exit 1
+fi
+
+# Remote probe: print a stable, parseable report. No writes.
+probe_script=$(cat <<'REMOTE'
+set -eu
+LAST="$HOME/.tmux/resurrect/last"
+LAST_TARGET=""
+if [ ! -e "$LAST" ]; then
+  echo "LAST_MISSING"
+else
+  LAST_TARGET=$(readlink "$LAST" 2>/dev/null || basename "$LAST")
+  echo "LAST_TARGET $LAST_TARGET"
+  echo "LAST_DIR $HOME/.tmux/resurrect"
+fi
+
+echo "BEGIN_CWDS"
+if [ -n "$LAST_TARGET" ]; then
+  awk -F '\t' '/^pane\t/ {
+    cwd=$8
+    sub(/^:/, "", cwd)
+    if (cwd != "") print cwd
+  }' "$HOME/.tmux/resurrect/$LAST_TARGET" 2>/dev/null | sort -u
+fi
+echo "END_CWDS"
+
+echo "BEGIN_CHATS"
+if [ -d "$HOME/.config/cursor/chats" ]; then
+  du -sh "$HOME/.config/cursor/chats" 2>/dev/null || true
+  du -sh "$HOME/.config/cursor/chats"/* 2>/dev/null | sort -h || true
+fi
+echo "END_CHATS"
+
+echo "BEGIN_HASHES"
+if [ -n "$LAST_TARGET" ]; then
+awk -F '\t' '/^pane\t/ {
+  cwd=$8
+  sub(/^:/, "", cwd)
+  if (cwd != "") print cwd
+}' "$HOME/.tmux/resurrect/$LAST_TARGET" 2>/dev/null | sort -u | while IFS= read -r cwd; do
+  hash=$(printf '%s' "$cwd" | md5sum | awk '{print $1}')
+  size="missing"
+  if [ -d "$HOME/.config/cursor/chats/$hash" ]; then
+    size=$(du -sh "$HOME/.config/cursor/chats/$hash" | awk '{print $1}')
+  fi
+  exists=0
+  [ -d "$cwd" ] && exists=1
+  echo "$hash	$size	$exists	$cwd"
+done
+fi
+echo "END_HASHES"
+
+echo "BEGIN_WORKTREES"
+if [ -n "$LAST_TARGET" ]; then
+awk -F '\t' '/^pane\t/ {
+  cwd=$8
+  sub(/^:/, "", cwd)
+  if (cwd ~ /^\/src\// || cwd ~ /\/wt-/) print cwd
+}' "$HOME/.tmux/resurrect/$LAST_TARGET" 2>/dev/null | sort -u
+fi
+if command -v git >/dev/null 2>&1; then
+  for repo in /home/repo/*; do
+    [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || continue
+    git -C "$repo" worktree list --porcelain 2>/dev/null | awk -v repo="$repo" '
+      /^worktree / { wt=$2 }
+      /^branch / && wt != repo { print repo "\t" wt "\t" $2 }
+    '
+  done
+fi
+echo "END_WORKTREES"
+
+echo "BEGIN_DIRTY"
+{
+  printf '%s\n' \
+    /home/repo/snowbox-kdickerson \
+    /home/repo/snowml \
+    /home/repo/dotfiles \
+    /home/repo/dev-config \
+    /home/repo/mlplatform-benchmarking
+  if command -v git >/dev/null 2>&1; then
+    for repo in /home/repo/*; do
+      [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || continue
+      git -C "$repo" worktree list --porcelain 2>/dev/null | awk -v repo="$repo" '
+        /^worktree / { wt=$2 }
+        /^branch / && wt != repo { print wt }
+      '
+    done
+  fi
+  if [ -n "$LAST_TARGET" ]; then
+    awk -F '\t' '/^pane\t/ {
+      cwd=$8
+      sub(/^:/, "", cwd)
+      if (cwd ~ /^\/src\// || cwd ~ /\/wt-/) print cwd
+    }' "$HOME/.tmux/resurrect/$LAST_TARGET" 2>/dev/null
+  fi
+} | awk 'NF && !seen[$0]++' | while IFS= read -r path; do
+  git -C "$path" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
+  dirty="clean"
+  if [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then
+    dirty="dirty"
+  fi
+  ahead="0"
+  if git -C "$path" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
+    counts=$(git -C "$path" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null || printf '0\t0')
+    ahead=$(printf '%s' "$counts" | awk '{print $2+0}')
+  else
+    ahead="no-upstream"
+  fi
+  verdict="ok"
+  if [ "$dirty" != "clean" ] || [ "$ahead" = "no-upstream" ] || { [ "$ahead" != "no-upstream" ] && [ "$ahead" -gt 0 ]; }; then
+    verdict="problem"
+  fi
+  echo "$path	$dirty	$ahead	$verdict"
+done
+echo "END_DIRTY"
+
+echo "BEGIN_MISC"
+echo "transcript_dirs $(find "$HOME/.cursor/projects" -type d -name agent-transcripts 2>/dev/null | wc -l | tr -d ' ')"
+du -sh "$HOME/.cursor/projects" 2>/dev/null || true
+du -sh "$HOME/.cursor/plans" 2>/dev/null || true
+if [ -f "$HOME/.tmux/resurrect/assistant-sessions.json" ]; then
+  echo "assistant_sessions $(wc -c < "$HOME/.tmux/resurrect/assistant-sessions.json")"
+fi
+echo "END_MISC"
+
+agents=0
+if pgrep -f '/.local/bin/agent( |$)' >/dev/null 2>&1; then
+  agents=$(pgrep -f '/.local/bin/agent( |$)' | wc -l | tr -d ' ')
+fi
+echo "AGENTS_RUNNING $agents"
+REMOTE
+)
+
+echo "== probe $old =="
+probe_out=$(ssh_ws "$old" bash -s <<<"$probe_script")
+printf '%s\n' "$probe_out"
+
+agents_running=$(printf '%s\n' "$probe_out" | awk '/^AGENTS_RUNNING / {print $2}')
+agents_running=${agents_running:-0}
+
+dirty_problems=$(printf '%s\n' "$probe_out" | awk '/^BEGIN_DIRTY$/,/^END_DIRTY$/ {
+  if ($0 !~ /BEGIN_DIRTY|END_DIRTY/ && $4 == "problem") print
+}')
+
+if [[ -n "$dirty_problems" ]]; then
+  echo
+  echo "== dirty / unpushed (dies with the old volume) =="
+  printf '%s\n' "$dirty_problems"
+fi
+
+if [[ "$dry_run" -eq 1 ]]; then
+  echo
+  if [[ -n "$dirty_problems" ]]; then
+    echo "dry-run: no copy. Commit/push the problem checkouts (or pass --force-dirty), stop agents, then: cws-handoff $old <new>"
+  else
+    echo "dry-run: git checkouts are clean. Next: stop agents on $old, then: cws-handoff $old <new>"
+  fi
+  exit 0
+fi
+
+if [[ -n "$dirty_problems" && "$force_dirty" -eq 0 ]]; then
+  echo "cws-handoff: dirty or unpushed checkouts on $old. Commit/push them or pass --force-dirty." >&2
+  exit 1
+fi
+
+if [[ -n "$dirty_problems" ]]; then
+  echo "cws-handoff: --force-dirty: copying despite dirty/unpushed checkouts on $old" >&2
+fi
+
+if [[ "$agents_running" -gt 0 && "$force" -eq 0 ]]; then
+  echo "cws-handoff: $agents_running agent process(es) on $old. Stop them or pass --force (SQLite WAL)." >&2
+  exit 1
+fi
+
+if [[ "$agents_running" -gt 0 ]]; then
+  echo "cws-handoff: --force: copying with $agents_running agent(s) still running on $old" >&2
+fi
+
+echo
+echo "== copy $old -> $new =="
+
+ssh_ws "$new" "mkdir -p ~/.config/cursor/chats ~/.cursor/projects ~/.cursor/plans ~/.tmux/resurrect ~/.config/graphite ~/.snowflake"
+
+copy_home_file ".config/graphite/auth"
+copy_home_file ".snowflake/connections.toml"
+copy_home_file ".snowflake/config.toml"
+
+if [[ "$all_chats" -eq 1 ]]; then
+  echo "rsync chats (all)"
+  rsync_ws "$old:.config/cursor/chats/" "$new:.config/cursor/chats/"
+else
+  hashes=$(printf '%s\n' "$probe_out" | awk '/^BEGIN_HASHES$/,/^END_HASHES$/ {if ($0 !~ /BEGIN_HASHES|END_HASHES/ && $2 != "missing") print $1}')
+  if [[ -z "$hashes" ]]; then
+    echo "cws-handoff: no active chat dirs to copy" >&2
+  else
+    echo "rsync chats (active hashes)"
+    while IFS= read -r hash; do
+      [[ -n "$hash" ]] || continue
+      rsync_ws "$old:.config/cursor/chats/$hash/" "$new:.config/cursor/chats/$hash/"
+    done <<<"$hashes"
+  fi
+fi
+
+echo "rsync agent-transcripts + plans"
+# Project slugs stay the same if dest paths match. Skip agent-tools.
+ssh_ws "$old" 'find "$HOME/.cursor/projects" -type d -name agent-transcripts -print 2>/dev/null || true' \
+  | while IFS= read -r abs; do
+      [[ -n "$abs" ]] || continue
+      # -n: do not steal the find|while stdin
+      ssh -n -o BatchMode=yes -o ConnectTimeout=15 "$new" "mkdir -p '$abs'"
+      rsync_ws "$old:$abs/" "$new:$abs/"
+    done
+if ssh_ws "$old" 'test -d ~/.cursor/plans'; then
+  rsync_ws "$old:.cursor/plans/" "$new:.cursor/plans/"
+fi
+
+last_target=$(printf '%s\n' "$probe_out" | awk '/^LAST_TARGET / {print $2}')
+if [[ -n "$last_target" ]]; then
+  echo "rsync tmux last ($last_target)"
+  rsync_ws "$old:.tmux/resurrect/$last_target" "$new:.tmux/resurrect/$last_target"
+  ssh_ws "$new" "ln -sfn '$last_target' ~/.tmux/resurrect/last"
+  if ssh_ws "$old" 'test -f ~/.tmux/resurrect/assistant-sessions.json'; then
+    rsync_ws "$old:.tmux/resurrect/assistant-sessions.json" "$new:.tmux/resurrect/assistant-sessions.json"
+  fi
+fi
+
+echo
+echo "== leftovers =="
+printf '%s\n' "$probe_out" | awk '/^BEGIN_WORKTREES$/,/^END_WORKTREES$/'
+printf '%s\n' "$probe_out" | awk '/^BEGIN_DIRTY$/,/^END_DIRTY$/'
+echo
+echo "Do not copy Cursor auth.json. If the new box is logged out: sfid -l cursor on the Mac."
+echo "Missing dest dirs for a hash's cwd will not resume until that path exists (declare it in config.star or recreate the worktree)."
+echo "Then: connect $new"

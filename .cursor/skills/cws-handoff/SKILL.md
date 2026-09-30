@@ -13,7 +13,7 @@ Move from an old Cloud Workspace to a new one. Env comes from published
 dev-config + `~/setup.sh`. Session blobs go through `cws-handoff`. Do not
 use `sf ws create --from`. Do not rsync `$HOME`. Do not copy `auth.json`.
 
-Script: `~/.local/bin/cws-handoff`. Facts in
+Script: `~/.local/bin/cws-handoff` (stowed from dotfiles). Facts in
 [reference.md](reference.md).
 
 ## Workflow
@@ -24,7 +24,7 @@ Copy this checklist:
 - [ ] Preflight old box
 - [ ] Create (no --from) if needed
 - [ ] ~/setup.sh on the new box
-- [ ] ~/.snowflake/connections.toml + config.toml
+- [ ] ~/.snowflake/connections.toml + config.toml, ~/.config/graphite/auth
 - [ ] Stop agents on the old box
 - [ ] cws-handoff OLD NEW
 - [ ] leftovers + connect
@@ -99,17 +99,19 @@ nix shell nixpkgs#cmake nixpkgs#gnumake --command \
 If you pushed commits after `sf ws create` started, `git pull --ff-only`
 those remotes on the new box. The create clone is a snapshot.
 
-Create drops a stub `~/.snowflake/connections.toml` and no
-`config.toml`. Copy both from the old box. Hop through a Mac temp
-file; `chmod 600`. Do not print the contents. Do not commit them. Do
-not copy `pats.txt` or `logs/` unless asked.
+`cws-handoff` copies `~/.snowflake/connections.toml`,
+`~/.snowflake/config.toml`, and `~/.config/graphite/auth` (chmod 600).
+Create may drop a stub connections.toml. Do not print these files. Do
+not commit them. Do not copy `pats.txt` or `logs/` unless asked. If
+you are not running the script yet, hop through a Mac temp file:
 
 ```bash
-for f in connections.toml config.toml; do
-  scp OLD:~/.snowflake/$f /tmp/cws-$f
-  scp /tmp/cws-$f NEW:~/.snowflake/$f
-  ssh NEW "chmod 600 ~/.snowflake/$f"
-  rm /tmp/cws-$f
+for f in .snowflake/connections.toml .snowflake/config.toml .config/graphite/auth; do
+  scp OLD:~/$f /tmp/cws-secret
+  ssh NEW "mkdir -p ~/$(dirname "$f")"
+  scp /tmp/cws-secret NEW:~/$f
+  ssh NEW "chmod 600 ~/$f"
+  rm /tmp/cws-secret
 done
 ```
 
