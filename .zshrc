@@ -152,7 +152,7 @@ alias coco="cortex"
 alias cc="CLAUDE_CODE_EFFORT_LEVEL=auto ENABLE_TOOL_SEARCH=true sf ai claude -- --dangerously-skip-permissions --model 'claude-sonnet-5[1m]'"
 # alias cc="claude --effort max --dangerously-skip-permissions"
 alias ca="agent --yolo"
-alias cx="sf ai codex --yolo"
+alias cx="sf ai codex -- --yolo"
 
 # Cortex CLI completion (disable via /settings in cortex)
 [[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
