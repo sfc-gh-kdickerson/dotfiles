@@ -284,22 +284,38 @@ pipeline/build, job/test, timestamp, signature, and evidence already checked.
 
 ## 5. Precommit and approval
 
-Treat `SnowCI: Precommit-Enforcer (New)` as a separate gate. Read its check
-summary rather than guessing from labels or PR-body links.
+Treat `SnowCI: Precommit-Enforcer (New)` as a GitHub merge prerequisite, not as
+proof that this PR head was tested. Read its check-run summary. Never add
+`NO_PRECOMMIT_RUN` or `ACK_AND_OVERRIDE_PRECOMMIT_FINDING` automatically. Do
+not use GitHub's rerun button for the enforcer.
 
-- A successful enforcer result is authoritative, including an accepted stale
-  green or a stack-descendant precommit.
-- If it reports no qualifying terminal precommit, start:
+Shepherding requires a **current-head** `snowflake--default-precommit`:
+
+- Commit SHA equals the live PR head. Stale green, ancestor, and descendant
+  runs do not count. Custom-only does not count.
+- If no such build is running or terminal on this head, start:
 
   ```bash
   sf ci build start default-precommit -o json
   ```
 
-- Diagnose a failed precommit with the same causality rules as other CI.
-- Never add `NO_PRECOMMIT_RUN` or
-  `ACK_AND_OVERRIDE_PRECOMMIT_FINDING` automatically.
-- Do not use GitHub's rerun button for the enforcer; it updates from relevant
-  labels and precommit build state.
+- After every push, the previous precommit is invalid. Start a new one on the
+  new head.
+- If a matching build is already running, wait; do not start a duplicate.
+
+When that build reaches a terminal state, **inspect it yourself** before
+`ready_for_merge`. A green build or green enforcer is not a substitute. Use
+the section 4 SnowCI batch (failed tests, failed/broken jobs, annotations)
+plus the build's commit/state. Then scan failures against `git diff --name-only
+<base>...HEAD`:
+
+- **Related:** test class/file/scope maps to changed production or test files,
+  or the failure cites types this PR touched. Fix if PR-caused; otherwise
+  classify with the usual flake/broken-main/infra table.
+- **Unrelated:** do not patch the PR.
+- Soft-failed shards and `new_failure=false` can still hide a related test.
+  Page failed-test analytics until related names are ruled out.
+- Do not add `ready_for_merge` while related failures remain unexplained.
 
 At least one valid human approval is required. AI approval is feedback, not
 merge authorization. Every push may dismiss approval; refresh
@@ -313,6 +329,8 @@ Only add `ready_for_merge` when all are true:
 - PR is open and not draft;
 - no conflicts;
 - required checks and Precommit-Enforcer pass;
+- a default-precommit on **this head SHA** is terminal passed, and related
+  failures have been inspected (section 5);
 - required human approval is current;
 - change requests are resolved;
 - every addressed inline thread is confirmed resolved.
