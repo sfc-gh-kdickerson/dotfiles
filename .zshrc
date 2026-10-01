@@ -14,6 +14,17 @@ if [ ! -d "$ZINIT_HOME" ]; then
    git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
 fi
 # Source/Load zinit
+# Zsh automatically uses newer .zwc files when sourcing. Rebuild only after
+# installing/updating Zinit, keeping normal startup free of compilation work.
+() {
+  local script
+  for script in "$ZINIT_HOME"/zinit{,-side,-autoload,-install,-additional}.zsh; do
+    if [[ -r "$script" && -w "${script:h}" &&
+          ( ! -r "$script.zwc" || "$script" -nt "$script.zwc" ) ]]; then
+      zcompile -U "$script" 2>/dev/null
+    fi
+  done
+}
 source "${ZINIT_HOME}/zinit.zsh"
 
 # p10k — disable when Cursor Agent runs
@@ -109,7 +120,8 @@ if [ -d "$HOME/.zshrc.d" ]; then
 fi
 
 # Shell integrations
-eval "$(fzf --zsh)"
+# Bypass the fzf-tmux alias when generating shell integration code.
+eval "$(command fzf --zsh)"
 eval "$(zoxide init zsh)"
 
 alias ca="agent --yolo"
