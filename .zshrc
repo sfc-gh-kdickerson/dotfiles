@@ -30,7 +30,9 @@ zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
 fpath+=~/.zsh/completions
 autoload -Uz compinit
-compinit -D
+# Reuse completion definitions instead of rebuilding them for every pane.
+# Keep compinit's normal checks for insecure directories and new completions.
+compinit -d "${ZDOTDIR:-$HOME}/.zcompdump-${ZSH_VERSION}"
 zinit ice wait"1" lucid; zinit light Aloxaf/fzf-tab
 
 # zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
@@ -73,6 +75,7 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 # path
+typeset -U path PATH
 prependToPath() {
     PATH="$1:$PATH"
 }
@@ -81,7 +84,7 @@ appendToPath() {
 }
 # order will be homebrew, rust, go, normal, conda
 prependToPath "$HOME/go/bin"
-prependToPath "$HOME/.cargo/bin:$PATH"
+prependToPath "$HOME/.cargo/bin"
 prependToPath "/opt/homebrew/bin"
 prependToPath "$HOME/.fzf/bin"
 appendToPath "$HOME/miniconda3/bin"
