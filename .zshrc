@@ -83,6 +83,7 @@ appendToPath() {
 prependToPath "$HOME/go/bin"
 prependToPath "$HOME/.cargo/bin:$PATH"
 prependToPath "/opt/homebrew/bin"
+prependToPath "$HOME/.fzf/bin"
 appendToPath "$HOME/miniconda3/bin"
 
 # exports
