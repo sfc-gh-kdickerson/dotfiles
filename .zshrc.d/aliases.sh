@@ -8,6 +8,7 @@ alias fzfp="fzf-tmux -p --preview 'bat --color=always {}' --preview-window '~3'"
 alias ls="eza"
 alias cat="bat --paging=never"
 alias neogit="nvim -c Git"
+alias cx="codex --yolo"
 
 man() {
   nvim +"Man $* | only"
