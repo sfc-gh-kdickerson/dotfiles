@@ -36,36 +36,44 @@ else
 fi
 
 # plugins
-zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
+zinit ice wait"0" lucid atload'source $HOME/.zshrc.d/zsh-highlight-overrides.sh'
 zinit light zsh-users/zsh-syntax-highlighting
 zinit ice wait"1" lucid; zinit light zsh-users/zsh-autosuggestions
 zinit ice wait"1" lucid; zinit light ptavares/zsh-direnv
 fpath+=~/.zsh/completions
 autoload -Uz compinit
-# Reuse completion definitions instead of rebuilding them for every pane.
-# Keep compinit's normal checks for insecure directories and new completions.
-compinit -d "${ZDOTDIR:-$HOME}/.zcompdump-${ZSH_VERSION}"
+# Reuse the dump. Skip the insecure-dir audit when it is less than a day old.
+() {
+  setopt localoptions extendedglob
+  local dump="${ZDOTDIR:-$HOME}/.zcompdump-${ZSH_VERSION}"
+  if [[ -n $dump(#qN.mh+24) ]]; then
+    compinit -d "$dump"
+  else
+    compinit -C -d "$dump"
+  fi
+}
 zinit ice wait"1" lucid; zinit light Aloxaf/fzf-tab
 
 # zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
 #     atclone"./atuin init zsh > init.zsh; ./atuin gen-completions --shell zsh > _atuin" \
 #     atpull"%atclone" src"init.zsh"
-if type -p atuin > /dev/null; then
+if (( $+commands[atuin] )); then
+    zinit ice wait"0" lucid atload'bindkey "^R" atuin-search'
     zinit light atuinsh/atuin
 fi
 
 ZVM_VI_ESCAPE_BINDKEY=jj
 zinit ice depth"1" lucid; zinit light jeffreytse/zsh-vi-mode
 function zvm_after_init() {
-    # need this so atuin keybind doesn't get overridden by zvm
-    bindkey '^R' atuin-search
+    # Atuin may still be turbo-loading; atload also binds this.
+    bindkey '^R' atuin-search 2>/dev/null || true
 }
 
-# Oh My Zsh snippets
-zinit snippet OMZP::aws
-zinit snippet OMZP::colored-man-pages
-zinit snippet OMZP::git
-zinit snippet OMZP::sudo
+# Oh My Zsh snippets (after first prompt; aws completions are the expensive one)
+zinit ice wait"0" lucid; zinit snippet OMZP::aws
+zinit ice wait"0" lucid; zinit snippet OMZP::colored-man-pages
+zinit ice wait"0" lucid; zinit snippet OMZP::git
+zinit ice wait"0" lucid; zinit snippet OMZP::sudo
 
 # History
 HISTFILE=~/.zsh_history
@@ -94,14 +102,14 @@ prependToPath() {
 appendToPath() {
     PATH="$PATH:$1"
 }
-# order will be homebrew, rust, go, normal, conda
-prependToPath "$HOME/go/bin"
-prependToPath "$HOME/firstpass/bin"
-prependToPath "$HOME/.local/bin"
-prependToPath "$HOME/.cargo/bin"
-prependToPath "/opt/homebrew/bin"
-prependToPath "$HOME/.fzf/bin"
-appendToPath "$HOME/miniconda3/bin"
+# Skip missing dirs so command lookup does not stat Mac-only paths on CWS.
+[[ -d "$HOME/go/bin" ]] && prependToPath "$HOME/go/bin"
+[[ -d "$HOME/firstpass/bin" ]] && prependToPath "$HOME/firstpass/bin"
+[[ -d "$HOME/.local/bin" ]] && prependToPath "$HOME/.local/bin"
+[[ -d "$HOME/.cargo/bin" ]] && prependToPath "$HOME/.cargo/bin"
+[[ -d /opt/homebrew/bin ]] && prependToPath "/opt/homebrew/bin"
+[[ -d "$HOME/.fzf/bin" ]] && prependToPath "$HOME/.fzf/bin"
+[[ -d "$HOME/miniconda3/bin" ]] && appendToPath "$HOME/miniconda3/bin"
 
 # exports
 export FZF_TMUX_OPTS='-p80%,60%'
@@ -127,26 +135,37 @@ fi
 eval "$(command fzf --zsh)"
 eval "$(zoxide init zsh)"
 
-# sfid
-eval "$(sf aliases)"
+# sfid / sf wrapper from `sf aliases`. Cache so every pane does not fork sf.
+() {
+  local sf_bin cache
+  sf_bin="$(command -v sf 2>/dev/null)" || return
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}/sf-aliases.zsh"
+  mkdir -p "${cache:h}"
+  if [[ ! -r $cache || $sf_bin -nt $cache ]]; then
+    command sf aliases >|"$cache" 2>/dev/null || return
+  fi
+  source "$cache"
+}
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/Users/kdickerson/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh" ]; then
-        . "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh"
-    else
-        export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
-    fi
+if [[ -x /Users/kdickerson/miniconda3/bin/conda ]]; then
+  __conda_setup="$('/Users/kdickerson/miniconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+  if [ $? -eq 0 ]; then
+      eval "$__conda_setup"
+  else
+      if [ -f "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh" ]; then
+          . "/Users/kdickerson/miniconda3/etc/profile.d/conda.sh"
+      else
+          export PATH="/Users/kdickerson/miniconda3/bin:$PATH"
+      fi
+  fi
+  unset __conda_setup
 fi
-unset __conda_setup
 # <<< conda initialize <<<
 
 # Added by the Cortex Code installer.
-export PATH="/Users/kdickerson/.local/bin:$PATH"
+[[ -d /Users/kdickerson/.local/bin ]] && PATH="/Users/kdickerson/.local/bin:$PATH"
 
 alias coco="cortex"
 alias cc="CLAUDE_CODE_EFFORT_LEVEL=auto ENABLE_TOOL_SEARCH=true sf ai claude -- --dangerously-skip-permissions --model 'claude-sonnet-5[1m]'"
@@ -158,17 +177,26 @@ alias cx="sf ai codex -- --yolo"
 [[ -s ~/.zsh/completions/cortex.zsh ]] && source ~/.zsh/completions/cortex.zsh
 
 # bun completions
-[ -s "/Users/kdickerson/.bun/_bun" ] && source "/Users/kdickerson/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
+[[ -d "$BUN_INSTALL/bin" ]] && PATH="$BUN_INSTALL/bin:$PATH"
 
 if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
 
 export NVM_DIR="$HOME/.config/nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+  _load_nvm() {
+    unset -f nvm node npm npx _load_nvm
+    . "$NVM_DIR/nvm.sh"
+    [[ -s "$NVM_DIR/bash_completion" ]] && . "$NVM_DIR/bash_completion"
+  }
+  nvm()  { _load_nvm; nvm "$@"; }
+  node() { _load_nvm; command node "$@"; }
+  npm()  { _load_nvm; command npm "$@"; }
+  npx()  { _load_nvm; command npx "$@"; }
+fi
 
 export JIRA_URL="https://snowflakecomputing.atlassian.net"
 export JIRA_USERNAME="kaleb.dickerson@snowflake.com"
@@ -178,5 +206,4 @@ if [ -e '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' ]; then
   . '/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh'
 fi
 
-# opencode
-export PATH=/home/kdickerson/.opencode/bin:$PATH
+[[ -d "$HOME/.opencode/bin" ]] && PATH="$HOME/.opencode/bin:$PATH"
