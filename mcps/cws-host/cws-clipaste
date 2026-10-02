@@ -1,6 +1,7 @@
 #!/bin/sh
 # Fetch the Mac pasteboard as a PNG via the CWS facade and print the path.
-# --tmux: insert that path into $TMUX_PANE (no Enter).
+# --tmux [pane_id]: send-keys that path into the pane; no stdout (tmux
+# run-shell otherwise opens copy-mode on the printed path).
 
 set -u
 
@@ -8,16 +9,19 @@ TOKEN_PATH="${HOME}/.local/share/cws-host-mcp/token"
 FACADE_URL="http://127.0.0.1:18765/clipboard.png"
 PNG_MAGIC_HEX="89504e470d0a1a0a"
 tmux_mode=0
+pane=""
 if [ "${1-}" = "--tmux" ]; then
   tmux_mode=1
+  pane="${2:-${TMUX_PANE-}}"
 fi
 
 die() {
   _code="$1"
   shift
   _err="$*"
-  if [ "$tmux_mode" -eq 1 ] && [ -n "${TMUX_PANE-}" ]; then
+  if [ "$tmux_mode" -eq 1 ]; then
     tmux display-message -d 2500 -- "$_err"
+    exit "$_code"
   fi
   printf '%s\n' "$_err" >&2
   exit "$_code"
@@ -65,8 +69,11 @@ chmod 600 "$out"
 cp "$out" "$latest"
 chmod 600 "$latest"
 
-if [ "$tmux_mode" -eq 1 ] && [ -n "${TMUX_PANE-}" ]; then
-  tmux send-keys -t "$TMUX_PANE" -l -- "$out "
+if [ "$tmux_mode" -eq 1 ]; then
+  if [ -z "$pane" ]; then
+    die 1 "no tmux pane"
+  fi
+  tmux send-keys -t "$pane" -l -- "$out "
   exit 0
 fi
 
