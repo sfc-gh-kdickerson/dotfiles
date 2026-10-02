@@ -11,7 +11,7 @@ import hashlib
 
 from lock import state_dir
 
-TREE_FILES = ("host.py", "facade.py", "protocol.py", "tools.py", "lock.py", "lockrun.py")
+TREE_FILES = ("host.py", "facade.py", "protocol.py", "tools.py", "lock.py", "lockrun.py", "cws-clipaste")
 
 
 def tree_hash(root):
@@ -156,6 +156,17 @@ def write_json(handler, status, payload, extra_headers=None):
             handler.send_header(key, value)
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def write_bytes(handler, status, body, content_type):
+    body = body or b""
+    handler.send_response(status)
+    if content_type:
+        handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    if body:
+        handler.wfile.write(body)
 
 
 def read_body(handler):

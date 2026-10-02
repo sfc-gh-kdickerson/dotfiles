@@ -103,11 +103,11 @@ _cws_host_upload() {
   state="$(_cws_host_state)"
   hash="$(_cws_host_tree_hash)"
   stage="$(mktemp -d)"
-  cp "$src"/host.py "$src"/facade.py "$src"/protocol.py "$src"/tools.py "$src"/lock.py "$src"/lockrun.py "$stage/"
+  cp "$src"/host.py "$src"/facade.py "$src"/protocol.py "$src"/tools.py "$src"/lock.py "$src"/lockrun.py "$src"/cws-clipaste "$stage/"
   cp "${state}/token" "$stage/token"
   print -r -- "$hash" >"${stage}/tree.sha"
   COPYFILE_DISABLE=1 tar -C "$stage" -cf - . \
-    | command sf ws ssh "$id" --command 'mkdir -p ~/.local/share/cws-host-mcp && tar -C ~/.local/share/cws-host-mcp -xf - && chmod 600 ~/.local/share/cws-host-mcp/token' \
+    | command sf ws ssh "$id" --command 'mkdir -p ~/.local/share/cws-host-mcp && tar -C ~/.local/share/cws-host-mcp -xf - && chmod 600 ~/.local/share/cws-host-mcp/token && chmod 755 ~/.local/share/cws-host-mcp/cws-clipaste' \
     || { rm -rf "$stage"; return 1; }
   rm -rf "$stage"
   print -r -- "cws-host: uploaded tree ${hash[1,12]}"

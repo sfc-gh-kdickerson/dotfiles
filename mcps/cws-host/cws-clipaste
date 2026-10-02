@@ -1,0 +1,74 @@
+#!/bin/sh
+# Fetch the Mac pasteboard as a PNG via the CWS facade and print the path.
+# --tmux: insert that path into $TMUX_PANE (no Enter).
+
+set -u
+
+TOKEN_PATH="${HOME}/.local/share/cws-host-mcp/token"
+FACADE_URL="http://127.0.0.1:18765/clipboard.png"
+PNG_MAGIC_HEX="89504e470d0a1a0a"
+tmux_mode=0
+if [ "${1-}" = "--tmux" ]; then
+  tmux_mode=1
+fi
+
+die() {
+  _code="$1"
+  shift
+  _err="$*"
+  if [ "$tmux_mode" -eq 1 ] && [ -n "${TMUX_PANE-}" ]; then
+    tmux display-message -d 2500 -- "$_err"
+  fi
+  printf '%s\n' "$_err" >&2
+  exit "$_code"
+}
+
+if [ ! -f "$TOKEN_PATH" ]; then
+  die 1 "missing token; re-run connect"
+fi
+token=$(cat "$TOKEN_PATH")
+if [ -z "$token" ]; then
+  die 1 "missing token; re-run connect"
+fi
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+code=$(curl -s -o "$tmp" -w '%{http_code}' \
+  -H "Authorization: Bearer ${token}" \
+  --max-time 10 \
+  "$FACADE_URL" 2>/dev/null) || code="000"
+
+if [ "$code" = "204" ]; then
+  die 2 "no image on Mac clipboard"
+fi
+if [ "$code" = "401" ]; then
+  die 1 "unauthorized (token mismatch; re-run connect)"
+fi
+if [ "$code" = "503" ] || [ "$code" = "000" ]; then
+  die 1 "Mac host down; run connect <id> on the laptop"
+fi
+if [ "$code" != "200" ]; then
+  snippet=$(dd if="$tmp" bs=200 count=1 2>/dev/null | tr -d '\n')
+  die 1 "clipboard.png HTTP ${code}: ${snippet}"
+fi
+
+sig=$(dd if="$tmp" bs=8 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+if [ "$sig" != "$PNG_MAGIC_HEX" ]; then
+  die 1 "clipboard.png HTTP 200: not a PNG"
+fi
+
+out="/tmp/cws-clipboard-$$.png"
+latest="/tmp/cws-clipboard-latest.png"
+cp "$tmp" "$out" || die 1 "failed to write $out"
+chmod 600 "$out"
+cp "$out" "$latest"
+chmod 600 "$latest"
+
+if [ "$tmux_mode" -eq 1 ] && [ -n "${TMUX_PANE-}" ]; then
+  tmux send-keys -t "$TMUX_PANE" -l -- "$out "
+  exit 0
+fi
+
+printf '%s\n' "$out"
+exit 0

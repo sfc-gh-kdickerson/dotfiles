@@ -25,6 +25,7 @@ from protocol import (
     read_body,
     read_token,
     wants_sse,
+    write_bytes,
     write_json,
 )
 from tools import TOOLS
@@ -97,6 +98,32 @@ def call_tool(token, name, arguments):
     return mcp_text_result(json.dumps(result, indent=2, default=str))
 
 
+def proxy_clipboard_png(handler, token):
+    header = handler.headers.get("Authorization")
+    if not bearer_ok(header, token):
+        write_json(handler, 401, {"error": "unauthorized"})
+        return
+    req = Request(
+        HOST_URL + "/clipboard.png",
+        headers={"Authorization": "Bearer %s" % token},
+        method="GET",
+    )
+    try:
+        with urlopen(req, timeout=10) as resp:
+            body = resp.read()
+            status = resp.getcode()
+            content_type = resp.headers.get("Content-Type")
+        write_bytes(handler, status, body, content_type)
+    except HTTPError as exc:
+        body = exc.read()
+        content_type = None
+        if exc.headers:
+            content_type = exc.headers.get("Content-Type")
+        write_bytes(handler, exc.code, body, content_type)
+    except (URLError, TimeoutError, OSError):
+        write_json(handler, 503, {"error": OFFLINE_MESSAGE})
+
+
 class FacadeHandler(BaseHTTPRequestHandler):
     token = ""
 
@@ -130,6 +157,9 @@ class FacadeHandler(BaseHTTPRequestHandler):
             self.send_response(405)
             self.send_header("Allow", "POST")
             self.end_headers()
+            return
+        if self.path == "/clipboard.png":
+            proxy_clipboard_png(self, self.token)
             return
         write_json(self, 404, {"error": "not found"})
 
