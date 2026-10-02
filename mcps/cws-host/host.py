@@ -24,6 +24,7 @@ from protocol import (
     eprint,
     read_body,
     read_token,
+    write_bytes,
     write_json,
 )
 from tools import HOST_TOOLS, HOST_TOOL_NAMES
@@ -35,6 +36,9 @@ LOCK_NAME = "host.lock"
 AUDIT_NAME = "audit.log"
 WORKSPACE_FILE = "workspace"
 _LOCK_FD = None
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+PNG_MAX = 20 * 1024 * 1024
+_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".heic")
 
 
 class ToolError(Exception):
@@ -344,6 +348,129 @@ def tool_push_to_cws(args):
     return {"local_path": local_path, "remote_path": remote_path, "deleted_source": delete_source}
 
 
+def _unlink(path):
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _tmp_path(suffix):
+    fd, path = tempfile.mkstemp(prefix="cws-clipboard-", suffix=suffix)
+    os.close(fd)
+    return path
+
+
+def _read_bytes(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def _osascript(script):
+    proc = run(["osascript", "-e", script], timeout=15)
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+        raise RuntimeError(err or "osascript failed")
+    return (proc.stdout or b"").decode("utf-8", "replace").strip()
+
+
+def _write_clipboard_class(out_path, class_expr):
+    script = (
+        "set outPath to POSIX file %s\n"
+        "try\n"
+        "  set clipData to the clipboard as %s\n"
+        "  set fh to open for access outPath with write permission\n"
+        "  set eof of fh to 0\n"
+        "  write clipData to fh\n"
+        "  close access fh\n"
+        "  return \"ok\"\n"
+        "on error\n"
+        "  try\n"
+        "    close access outPath\n"
+        "  end try\n"
+        "  return \"\"\n"
+        "end try"
+    ) % (json.dumps(out_path), class_expr)
+    return _osascript(script) == "ok"
+
+
+def _sips_png(src):
+    dst = _tmp_path(".png")
+    try:
+        proc = run(["sips", "-s", "format", "png", src, "--out", dst], timeout=30)
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or b"").decode("utf-8", "replace").strip()
+            raise RuntimeError(err or "sips failed")
+        data = _read_bytes(dst)
+        if not data or not data.startswith(PNG_MAGIC):
+            raise RuntimeError("sips did not produce a PNG")
+        return data
+    finally:
+        _unlink(dst)
+
+
+def _clipboard_pngf():
+    path = _tmp_path(".png")
+    try:
+        if not _write_clipboard_class(path, "«class PNGf»"):
+            return None
+        data = _read_bytes(path)
+        if data and data.startswith(PNG_MAGIC) and len(data) > 0:
+            return data
+        return None
+    finally:
+        _unlink(path)
+
+
+def _clipboard_finder_file():
+    script = (
+        "try\n"
+        "  return POSIX path of (the clipboard as alias)\n"
+        "on error\n"
+        "  try\n"
+        "    return POSIX path of (the clipboard as «class furl»)\n"
+        "  on error\n"
+        "    return \"\"\n"
+        "  end try\n"
+        "end try"
+    )
+    path = _osascript(script)
+    if not path or not os.path.isfile(path):
+        return None
+    suffix = os.path.splitext(path)[1].lower()
+    if suffix not in _IMAGE_SUFFIXES:
+        return None
+    return _sips_png(path)
+
+
+def _clipboard_tiff():
+    path = _tmp_path(".tiff")
+    try:
+        if not _write_clipboard_class(path, "TIFF picture"):
+            if not _write_clipboard_class(path, "«class TIFF»"):
+                return None
+        if not os.path.isfile(path) or os.path.getsize(path) <= 0:
+            return None
+        return _sips_png(path)
+    finally:
+        _unlink(path)
+
+
+def clipboard_png_bytes():
+    png = _clipboard_pngf()
+    if png is not None:
+        return png
+    png = _clipboard_finder_file()
+    if png is not None:
+        return png
+    return _clipboard_tiff()
+
+
 def tool_clipboard_get(_args):
     proc = run(["pbpaste"])
     if proc.returncode != 0:
@@ -402,6 +529,24 @@ class HostHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/tools":
             write_json(self, 200, {"tools": HOST_TOOLS})
+            return
+        if self.path == "/clipboard.png":
+            try:
+                data = clipboard_png_bytes()
+            except Exception as exc:
+                audit("clipboard.png", {}, False, str(exc))
+                write_json(self, 500, {"error": str(exc)})
+                return
+            if data is None:
+                audit("clipboard.png", {}, True, "bytes=0")
+                write_bytes(self, 204, b"", None)
+                return
+            if len(data) > PNG_MAX:
+                audit("clipboard.png", {}, False, "bytes=%d" % len(data))
+                write_json(self, 413, {"error": "too large"})
+                return
+            audit("clipboard.png", {}, True, "bytes=%d" % len(data))
+            write_bytes(self, 200, data, "image/png")
             return
         write_json(self, 404, {"error": "not found"})
 
