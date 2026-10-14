@@ -11,7 +11,17 @@ import hashlib
 
 from lock import state_dir
 
-TREE_FILES = ("host.py", "facade.py", "protocol.py", "tools.py", "lock.py", "lockrun.py", "cws-clipaste")
+TREE_FILES = (
+    "host.py",
+    "facade.py",
+    "protocol.py",
+    "tools.py",
+    "mac_ui.py",
+    "chrome.py",
+    "lock.py",
+    "lockrun.py",
+    "cws-clipaste",
+)
 
 
 def tree_hash(root):
@@ -88,6 +98,16 @@ def mcp_text_result(text, is_error=False):
     if is_error:
         payload["isError"] = True
     return payload
+
+
+def mcp_image_result(data, mime_type, metadata=None, extracted_text=None):
+    content = [{"type": "image", "data": data, "mimeType": mime_type}]
+    if metadata is not None:
+        content.append({"type": "text", "text": json.dumps(metadata, indent=2, default=str)})
+    if extracted_text is not None:
+        text = extracted_text or "(no text recognized)"
+        content.append({"type": "text", "text": "OCR text:\n%s" % text})
+    return {"content": content}
 
 
 def mcp_initialize_result():

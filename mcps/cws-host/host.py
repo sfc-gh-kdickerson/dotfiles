@@ -3,6 +3,8 @@
 
 from __future__ import print_function
 
+import base64
+import hashlib
 import json
 import os
 import shlex
@@ -12,10 +14,13 @@ import stat as statmod
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+import chrome as chrome_control
+import mac_ui
 from lock import open_and_lock, read_lock_pid, state_dir
 from protocol import (
     HOST_PORT,
@@ -36,9 +41,81 @@ LOCK_NAME = "host.lock"
 AUDIT_NAME = "audit.log"
 WORKSPACE_FILE = "workspace"
 _LOCK_FD = None
+CAPTURES = mac_ui.CaptureRegistry()
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 PNG_MAX = 20 * 1024 * 1024
+SCRIPT_MAX = 100000
+SCRIPT_OUTPUT_MAX = 1024 * 1024
+CHROME_INLINE_MAX = 512 * 1024
 _IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff", ".heic")
+_WINDOW_LIST_JXA = r"""
+ObjC.import("CoreGraphics");
+ObjC.import("Foundation");
+
+function getValue(entry, key) {
+    var value = entry.objectForKey(key);
+    if (!value) {
+        return null;
+    }
+    return ObjC.deepUnwrap(value);
+}
+
+function run() {
+    var raw = $.CGWindowListCopyWindowInfo(17, 0);
+    var count = $.CFArrayGetCount(raw);
+    var windows = [];
+    for (var i = 0; i < count; i++) {
+        var entry = ObjC.castRefToObject($.CFArrayGetValueAtIndex(raw, i));
+        var layer = Number(getValue(entry, "kCGWindowLayer"));
+        var onscreen = Boolean(getValue(entry, "kCGWindowIsOnscreen"));
+        var bounds = getValue(entry, "kCGWindowBounds") || {};
+        var width = Number(bounds.Width || 0);
+        var height = Number(bounds.Height || 0);
+        var title = String(getValue(entry, "kCGWindowName") || "");
+        if (layer !== 0 || !onscreen || !title || width <= 0 || height <= 0) {
+            continue;
+        }
+        windows.push({
+            window_id: Number(getValue(entry, "kCGWindowNumber")),
+            app: String(getValue(entry, "kCGWindowOwnerName") || ""),
+            title: title,
+            pid: Number(getValue(entry, "kCGWindowOwnerPID")),
+            bounds: {
+                x: Number(bounds.X || 0),
+                y: Number(bounds.Y || 0),
+                width: width,
+                height: height
+            }
+        });
+    }
+    return JSON.stringify(windows);
+}
+"""
+_OCR_JXA = r"""
+ObjC.import("Foundation");
+ObjC.import("Vision");
+
+function run(argv) {
+    var url = $.NSURL.fileURLWithPath(argv[0]);
+    var request = $.VNRecognizeTextRequest.alloc.init;
+    request.recognitionLevel = 1;
+    request.usesLanguageCorrection = true;
+    request.automaticallyDetectsLanguage = true;
+    var handler = $.VNImageRequestHandler.alloc.initWithURLOptions(url, {});
+    var error = $();
+    var ok = handler.performRequestsError($([request]), error);
+    if (!ok) {
+        throw new Error($(error.localizedDescription).js);
+    }
+    var lines = request.results.js.map(function (observation) {
+        var candidates = observation.topCandidates(1).js;
+        return candidates.length ? candidates[0].string.js : "";
+    }).filter(function (line) {
+        return line.length > 0;
+    });
+    return JSON.stringify({text: lines.join("\n"), lines: lines.length});
+}
+"""
 
 
 class ToolError(Exception):
@@ -58,11 +135,22 @@ def outbox_dir():
 
 
 def audit(name, arguments, ok, detail=""):
+    audit_arguments = arguments
+    if name in ("run_applescript", "chrome_eval") and isinstance(arguments, dict):
+        field = "script" if name == "run_applescript" else "javascript"
+        script = arguments.get(field)
+        if isinstance(script, str):
+            encoded = script.encode("utf-8")
+            audit_arguments = dict(arguments)
+            audit_arguments[field] = {
+                "bytes": len(encoded),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+            }
     line = "%s\t%s\tok=%s\t%s\t%s\n" % (
         datetime.now(timezone.utc).isoformat(),
         name,
         ok,
-        json.dumps(arguments, sort_keys=True, default=str),
+        json.dumps(audit_arguments, sort_keys=True, default=str),
         detail.replace("\n", " ")[:500],
     )
     path = os.path.join(state_dir(), AUDIT_NAME)
@@ -168,6 +256,362 @@ def tool_notify(args):
     if proc.returncode != 0:
         raise ToolError((proc.stderr or b"").decode("utf-8", "replace") or "osascript failed")
     return {"notified": True}
+
+
+def _decode_output(value):
+    return (value or b"").decode("utf-8", "replace")
+
+
+def tool_run_applescript(args):
+    script = args.get("script")
+    if not isinstance(script, str) or not script:
+        raise ToolError("script is required")
+    encoded = script.encode("utf-8")
+    if len(encoded) > SCRIPT_MAX:
+        raise ToolError("script exceeds %d bytes" % SCRIPT_MAX)
+    timeout = args.get("timeout_seconds", 30)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 120:
+        raise ToolError("timeout_seconds must be an integer from 1 to 120")
+    try:
+        proc = run(["osascript"], timeout=timeout, input_bytes=encoded)
+    except subprocess.TimeoutExpired:
+        raise ToolError("AppleScript timed out after %d seconds" % timeout)
+    stdout = proc.stdout or b""
+    stderr = proc.stderr or b""
+    if len(stdout) + len(stderr) > SCRIPT_OUTPUT_MAX:
+        raise ToolError("AppleScript output exceeds %d bytes" % SCRIPT_OUTPUT_MAX)
+    if proc.returncode != 0:
+        raise ToolError(_decode_output(stderr or stdout).strip() or "osascript failed")
+    result = {"stdout": _decode_output(stdout).rstrip("\n"), "exit_code": 0}
+    if stderr:
+        result["stderr"] = _decode_output(stderr).rstrip("\n")
+    return result
+
+
+def _window_list():
+    proc = run(["osascript", "-l", "JavaScript", "-e", _WINDOW_LIST_JXA], timeout=15)
+    if proc.returncode != 0:
+        raise ToolError(_decode_output(proc.stderr or proc.stdout).strip() or "window listing failed")
+    try:
+        windows = json.loads(_decode_output(proc.stdout))
+    except (TypeError, ValueError) as exc:
+        raise ToolError("invalid window list: %s" % exc)
+    if not isinstance(windows, list):
+        raise ToolError("invalid window list response")
+    return windows
+
+
+def tool_list_windows(args):
+    windows = _window_list()
+    app = args.get("app")
+    if app is not None:
+        if not isinstance(app, str) or not app:
+            raise ToolError("app must be a non-empty string")
+        wanted = app.casefold()
+        windows = [window for window in windows if str(window.get("app", "")).casefold() == wanted]
+    return {"windows": windows, "count": len(windows)}
+
+
+def _capture_window(windows, window_id):
+    for window in windows:
+        if window.get("window_id") == window_id:
+            return window
+    raise ToolError("no visible normal window with id %s; call list_windows again" % window_id)
+
+
+def _ocr_image(path):
+    proc = run(["osascript", "-l", "JavaScript", "-e", _OCR_JXA, path], timeout=60)
+    if proc.returncode != 0:
+        raise ToolError(_decode_output(proc.stderr or proc.stdout).strip() or "OCR failed")
+    try:
+        result = json.loads(_decode_output(proc.stdout))
+    except (TypeError, ValueError) as exc:
+        raise ToolError("invalid OCR response: %s" % exc)
+    if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+        raise ToolError("invalid OCR response")
+    return result
+
+
+def tool_screenshot(args):
+    target = args.get("target", "display")
+    if target not in ("display", "region", "frontmost_window", "window"):
+        raise ToolError("target must be display, region, frontmost_window, or window")
+    include_ocr = args.get("include_ocr", False)
+    if not isinstance(include_ocr, bool):
+        raise ToolError("include_ocr must be a boolean")
+
+    metadata = {"target": target}
+    if target == "display":
+        display = args.get("display", 1)
+        if isinstance(display, bool) or not isinstance(display, int) or display < 1:
+            raise ToolError("display must be a positive integer")
+        try:
+            display_info = mac_ui.display_bounds(display)
+        except mac_ui.UIError as exc:
+            raise ToolError(str(exc))
+        command = ["screencapture", "-x", "-D%d" % display]
+        metadata["display"] = display
+        metadata["logical_bounds"] = display_info["bounds"]
+        metadata["display_scale_factor"] = display_info["scale_factor"]
+    elif target == "region":
+        region = {key: args.get(key) for key in ("x", "y", "width", "height")}
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in region.values()):
+            raise ToolError("x, y, width, and height must be integers when target is region")
+        if region["width"] < 1 or region["height"] < 1:
+            raise ToolError("region width and height must be positive")
+        command = [
+            "screencapture",
+            "-x",
+            "-R%d,%d,%d,%d"
+            % (region["x"], region["y"], region["width"], region["height"]),
+        ]
+        metadata["region"] = region
+        metadata["logical_bounds"] = dict(region)
+    else:
+        windows = _window_list()
+        if target == "frontmost_window":
+            if not windows:
+                raise ToolError("no visible normal windows")
+            window = windows[0]
+        else:
+            window_id = args.get("window_id")
+            if isinstance(window_id, bool) or not isinstance(window_id, int) or window_id < 1:
+                raise ToolError("window_id is required when target is window")
+            window = _capture_window(windows, window_id)
+        command = ["screencapture", "-x", "-o", "-l%d" % window["window_id"]]
+        metadata["window"] = window
+        metadata["logical_bounds"] = dict(window["bounds"])
+
+    fd, path = tempfile.mkstemp(prefix="cws-screenshot-", suffix=".png")
+    os.close(fd)
+    _unlink(path)
+    try:
+        proc = run(command + [path], timeout=30)
+        if proc.returncode != 0:
+            raise ToolError(_decode_output(proc.stderr or proc.stdout).strip() or "screencapture failed")
+        data = _read_bytes(path)
+        if not data or not data.startswith(PNG_MAGIC):
+            raise ToolError("screencapture did not produce a PNG")
+        if len(data) > PNG_MAX:
+            raise ToolError("screenshot exceeds %d bytes" % PNG_MAX)
+        metadata["bytes"] = len(data)
+        try:
+            pixel_width, pixel_height = mac_ui.png_size(data)
+            capture = CAPTURES.register(metadata, pixel_width, pixel_height)
+        except mac_ui.UIError as exc:
+            raise ToolError(str(exc))
+        metadata.update(
+            {
+                "screenshot_id": capture["screenshot_id"],
+                "pixel_width": pixel_width,
+                "pixel_height": pixel_height,
+                "scale_x": capture["scale_x"],
+                "scale_y": capture["scale_y"],
+            }
+        )
+        result = {
+            "_mcp_image": {
+                "data": base64.b64encode(data).decode("ascii"),
+                "mimeType": "image/png",
+            },
+            "metadata": metadata,
+        }
+        if include_ocr:
+            try:
+                ocr = _ocr_image(path)
+                metadata["ocr_lines"] = ocr.get("lines")
+                result["ocr_text"] = ocr["text"]
+            except ToolError as exc:
+                metadata["ocr_error"] = str(exc)
+        return result
+    finally:
+        _unlink(path)
+
+
+def _capture_context(screenshot_id, activate):
+    if not isinstance(screenshot_id, str) or not screenshot_id:
+        raise ToolError("screenshot_id is required")
+    try:
+        capture = CAPTURES.get(screenshot_id)
+        if activate and capture.get("window_id") is not None:
+            mac_ui.raise_window(capture.get("window_pid"), capture.get("window_title"))
+        return capture
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+
+
+def _capture_point(args):
+    screenshot_id = args.get("screenshot_id")
+    activate = args.get("activate", True)
+    if not isinstance(activate, bool):
+        raise ToolError("activate must be a boolean")
+    capture = _capture_context(screenshot_id, activate)
+    x = args.get("x")
+    y = args.get("y")
+    if isinstance(x, bool) or not isinstance(x, (int, float)):
+        raise ToolError("x must be a number")
+    if isinstance(y, bool) or not isinstance(y, (int, float)):
+        raise ToolError("y must be a number")
+    windows = _window_list() if capture.get("window_id") is not None else []
+    try:
+        return CAPTURES.resolve_point(screenshot_id, x, y, windows=windows)
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+
+
+def tool_click(args):
+    point = _capture_point(args)
+    try:
+        mac_ui.click(
+            point["x"],
+            point["y"],
+            button=args.get("button", "left"),
+            clicks=args.get("clicks", 1),
+        )
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+    return {"clicked": True, "global_point": {"x": point["x"], "y": point["y"]}}
+
+
+def tool_type_text(args):
+    text = args.get("text")
+    if not isinstance(text, str):
+        raise ToolError("text must be a string")
+    screenshot_id = args.get("screenshot_id")
+    if screenshot_id is not None:
+        activate = args.get("activate", True)
+        if not isinstance(activate, bool):
+            raise ToolError("activate must be a boolean")
+        _capture_context(screenshot_id, activate)
+    try:
+        mac_ui.type_text(text)
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+    return {"typed": True, "characters": len(text)}
+
+
+def tool_key(args):
+    screenshot_id = args.get("screenshot_id")
+    if screenshot_id is not None:
+        activate = args.get("activate", True)
+        if not isinstance(activate, bool):
+            raise ToolError("activate must be a boolean")
+        _capture_context(screenshot_id, activate)
+    modifiers = args.get("modifiers") or []
+    if not isinstance(modifiers, list):
+        raise ToolError("modifiers must be an array")
+    try:
+        mac_ui.press_key(args.get("key"), modifiers)
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+    return {"pressed": args.get("key"), "modifiers": modifiers}
+
+
+def tool_scroll(args):
+    point = _capture_point(args)
+    try:
+        mac_ui.scroll(
+            point["x"],
+            point["y"],
+            args.get("delta_x", 0),
+            args.get("delta_y", 0),
+        )
+    except mac_ui.UIError as exc:
+        raise ToolError(str(exc))
+    return {
+        "scrolled": True,
+        "global_point": {"x": point["x"], "y": point["y"]},
+        "delta_x": args.get("delta_x", 0),
+        "delta_y": args.get("delta_y", 0),
+    }
+
+
+def tool_chrome_list_tabs(_args):
+    try:
+        tabs = chrome_control.list_tabs()
+    except chrome_control.ChromeError as exc:
+        raise ToolError(str(exc))
+    return {"tabs": tabs, "count": len(tabs)}
+
+
+def _push_generated_bytes(data, remote_path, workspace_id, suffix):
+    fd, local_path = tempfile.mkstemp(prefix="cws-generated-", suffix=suffix)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        pushed = tool_push_to_cws(
+            {
+                "local_path": local_path,
+                "remote_path": remote_path,
+                "workspace_id": workspace_id,
+                "delete_source": True,
+            }
+        )
+        return pushed["remote_path"]
+    finally:
+        _unlink(local_path)
+
+
+def tool_chrome_eval(args):
+    try:
+        result = chrome_control.evaluate(
+            tab_id=args.get("tab_id"),
+            url=args.get("url"),
+            source=args.get("javascript"),
+            timeout=args.get("timeout_seconds", 30),
+        )
+    except chrome_control.ChromeError as exc:
+        raise ToolError(str(exc))
+    remote_path = args.get("remote_path")
+    if remote_path or result["bytes"] > CHROME_INLINE_MAX:
+        if not remote_path:
+            remote_path = "~/CWS-outbox/chrome-eval-%s.json" % uuid.uuid4().hex[:12]
+        destination = _push_generated_bytes(
+            result["serialized"].encode("utf-8"),
+            remote_path,
+            args.get("workspace_id"),
+            ".json",
+        )
+        return {
+            "remote_path": destination,
+            "bytes": result["bytes"],
+            "tab": result["tab"],
+        }
+    return {"value": result["value"], "bytes": result["bytes"], "tab": result["tab"]}
+
+
+def tool_chrome_fetch(args):
+    timeout = args.get("timeout_seconds", 60)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 120:
+        raise ToolError("timeout_seconds must be an integer from 1 to 120")
+    try:
+        result = chrome_control.fetch(
+            args.get("url"),
+            tab_id=args.get("tab_id"),
+            timeout=timeout,
+        )
+    except chrome_control.ChromeError as exc:
+        raise ToolError(str(exc))
+    parsed = urlparse(args.get("url") or "")
+    basename = os.path.basename(parsed.path.rstrip("/")) or "chrome-download"
+    remote_path = args.get("remote_path") or "~/CWS-outbox/%s" % basename
+    destination = _push_generated_bytes(
+        result["body"],
+        remote_path,
+        args.get("workspace_id"),
+        os.path.splitext(basename)[1] or ".bin",
+    )
+    metadata = result["metadata"]
+    return {
+        "remote_path": destination,
+        "bytes": len(result["body"]),
+        "status": metadata.get("status"),
+        "ok": metadata.get("ok"),
+        "final_url": metadata.get("final_url"),
+        "content_type": metadata.get("content_type"),
+        "headers": metadata.get("headers"),
+        "tab": result["tab"],
+    }
 
 
 def tool_stat(args):
@@ -494,6 +938,16 @@ HANDLERS = {
     "open_path": tool_open_path,
     "reveal_in_finder": tool_reveal_in_finder,
     "notify": tool_notify,
+    "run_applescript": tool_run_applescript,
+    "list_windows": tool_list_windows,
+    "screenshot": tool_screenshot,
+    "click": tool_click,
+    "type_text": tool_type_text,
+    "key": tool_key,
+    "scroll": tool_scroll,
+    "chrome_list_tabs": tool_chrome_list_tabs,
+    "chrome_eval": tool_chrome_eval,
+    "chrome_fetch": tool_chrome_fetch,
     "stat": tool_stat,
     "listdir": tool_listdir,
     "pull_from_cws": tool_pull_from_cws,
