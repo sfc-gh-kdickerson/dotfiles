@@ -21,6 +21,7 @@ from protocol import (
     encode_sse,
     eprint,
     handle_mcp_request,
+    mcp_image_result,
     mcp_text_result,
     read_body,
     read_token,
@@ -93,6 +94,14 @@ def call_tool(token, name, arguments):
         return mcp_text_result(OFFLINE_MESSAGE, is_error=True)
     except Exception as exc:
         return mcp_text_result(str(exc), is_error=True)
+    if isinstance(result, dict) and "_mcp_image" in result:
+        image = result["_mcp_image"]
+        return mcp_image_result(
+            image["data"],
+            image["mimeType"],
+            metadata=result.get("metadata"),
+            extracted_text=result.get("ocr_text"),
+        )
     if isinstance(result, str):
         return mcp_text_result(result)
     return mcp_text_result(json.dumps(result, indent=2, default=str))

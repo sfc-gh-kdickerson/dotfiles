@@ -103,7 +103,7 @@ _cws_host_upload() {
   state="$(_cws_host_state)"
   hash="$(_cws_host_tree_hash)"
   stage="$(mktemp -d)"
-  cp "$src"/host.py "$src"/facade.py "$src"/protocol.py "$src"/tools.py "$src"/lock.py "$src"/lockrun.py "$src"/cws-clipaste "$stage/"
+  cp "$src"/host.py "$src"/facade.py "$src"/protocol.py "$src"/tools.py "$src"/mac_ui.py "$src"/chrome.py "$src"/lock.py "$src"/lockrun.py "$src"/cws-clipaste "$stage/"
   cp "${state}/token" "$stage/token"
   print -r -- "$hash" >"${stage}/tree.sha"
   COPYFILE_DISABLE=1 tar -C "$stage" -cf - . \
