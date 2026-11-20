@@ -51,7 +51,7 @@ replies, commits, pushes, merge, or the monitoring loop.
 
 Reuse the GS watcher; pass this repo:
 
-`python3 -u ~/.cursor/skills/shepherd-pr/scripts/watch_pr.py --repo snowflake-eng/snowml --pr <PR>`
+`python3 -u ~/.agents/skills/shepherd-pr/scripts/watch_pr.py --repo snowflake-eng/snowml --pr <PR>`
 
 ## 1. Resolve the PR and its existing worktree
 
@@ -85,7 +85,7 @@ Call Cursor `Shell` exactly like this (one job, from the PR worktree):
 
 ```text
 Tool: Shell
-command: python3 -u ~/.cursor/skills/shepherd-pr/scripts/watch_pr.py --repo snowflake-eng/snowml --pr <PR>
+command: python3 -u ~/.agents/skills/shepherd-pr/scripts/watch_pr.py --repo snowflake-eng/snowml --pr <PR>
 working_directory: <PR worktree absolute path>
 block_until_ms: 0
 notify_on_output.pattern: ^SHEPHERD_PR_EVENT

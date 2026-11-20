@@ -27,6 +27,14 @@ arguments:
 
 A technical doc exists to move a decision or an implementation forward in someone else's head. The reader has a job — approve it, build it, or remember later why it was built this way — and the document either lets them do that job fast or wastes their time. Length is not the goal. A reader who can decide after one page beats a reader still confused after ten.
 
+## Principles
+
+These come before everything else in this skill. When a rule below seems to conflict with one of them, the principle wins.
+
+- **Inform concisely.** Nobody likes reading reams of material. Say what the reader needs and stop there. If a shorter version keeps the same information, ship the shorter version.
+- **Always add value.** Every section, sentence, table, and diagram has to tell the reader something they didn't know or couldn't infer. Restating, recapping, and background the reader already has all fail this test. Cut them.
+- **Don't flood people.** Pick what matters for the reader's job and leave the rest out, or link to it. A complete investigation log is not a doc. Ten review comments of equal weight hide the two that matter. Lead with the few things that change the decision.
+
 Most weak engineering docs fail the same few ways: they open with the solution before the reader knows the problem, they never say what's out of scope, they present one option as if no others existed, and they hedge where they should commit. This skill is about avoiding those, in whatever format fits.
 
 ## Step 1 — Decide what you're writing, and for whom
@@ -138,6 +146,7 @@ Then run the checklist:
 - Is every claim falsifiable? "This will scale" is not; "handles 10k rps at p99 < 100ms on one node" is.
 - Are open questions surfaced, or conspicuously absent?
 - Could you cut 20% without losing information? Length without decisions is a smell.
+- Does every section add something the reader didn't already have? Is the doc, or the review, flooding the reader with material they don't need for their job?
 - Is a comparison, flow, interface, mapping, or timeline still a paragraph? If it could be a table, diagram, code block, or before/after, that's the gap.
 - Did the medium pass overshoot into table exhaustion — stacked tables, a "notes" grid of leftovers, two-row tables that were sentences? Merge, or put the leftovers back in prose.
 

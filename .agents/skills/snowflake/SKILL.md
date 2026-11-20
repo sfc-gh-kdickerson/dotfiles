@@ -13,7 +13,7 @@ arguments:
 
 # Snowflake Skill
 
-Gather context about Snowflake platform internals, codebase, documentation, environments, and architecture. Routes questions to the right source and keeps results out of the main context window.
+Gather context about Snowflake platform internals, codebase, documentation, environments, and architecture. Route questions to the right source and keep findings focused.
 
 ## Sources
 
@@ -48,15 +48,15 @@ Determine the best source based on the question:
 | Official feature reference, release notes | Public Docs | "What are the limits on external stages?", "CREATE STAGE syntax" |
 | Architecture, platform internals | Both | "How does service X work and what's its Snowflake footprint?" |
 
-If the `source` argument is provided, use that. Otherwise, default to all sources in parallel.
+If the `source` argument is provided, use that. Otherwise, default to all sources, querying independent sources in parallel when practical.
 
 ## Execution
 
-**All searches MUST be done via subagents (Task tool)** to keep results out of the main context window. Only the synthesized answer should come back.
+The main agent may search Glean and public docs directly. Choose direct lookup or delegation based on the task. Direct lookup is often simplest for focused questions or follow-up reads; consider subagents for broad research, independent lines of investigation, or large result sets that would crowd the main context. Delegation is optional and depends on available tools and session instructions. When delegating, ask for concise findings with source links.
 
-### Glean Subagent
+### Glean
 
-Launch a Task with `subagent_type: "general-purpose"` that uses the Glean MCP tools:
+Use the Glean MCP tools directly or through an optional subagent:
 
 - **`mcp__glean_default__search`** — keyword search for documents, code, messages
 - **`mcp__glean_default__code_search`** — search internal code repositories
@@ -71,9 +71,9 @@ Glean search tips:
 - Chain: search first, then `read_document` on the most relevant URLs for full content
 - For complex questions requiring synthesis: use `chat` tool
 
-### Snowflake Public Docs Subagent
+### Snowflake Public Docs
 
-Launch a Task with `subagent_type: "general-purpose"` that fetches from docs.snowflake.com:
+Search and fetch from docs.snowflake.com directly or through an optional subagent:
 
 1. **WebSearch** to find the right doc page:
    ```
@@ -93,11 +93,11 @@ Public docs tips:
 
 ### Parallel Execution
 
-When multiple sources are needed, launch subagents **in parallel** as separate Task calls in the same message. For example, a product docs question might launch both a Public Docs subagent and a Glean subagent simultaneously.
+When multiple sources are needed, independent lookups can run in parallel using direct tool calls or, if useful, separate subagents. Keep dependent steps sequential, such as searching for a document before reading its URL.
 
 ## Response
 
-After subagents return:
+After gathering results:
 1. Synthesize findings into a concise answer
 2. Cite sources where relevant (doc URLs from Glean)
 3. Flag any contradictions between sources
@@ -105,6 +105,5 @@ After subagents return:
 
 ## Important
 
-- **Always use subagents** — never call Glean MCP tools directly in the main conversation
-- **Summarize, don't dump** — the whole point is to keep the main context clean
+- **Summarize, don't dump** — keep findings concise whether searching directly or delegating
 - **Respect permissions** — Glean results are permission-filtered; if nothing comes back, the doc may exist but be restricted
