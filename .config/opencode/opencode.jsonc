@@ -21,9 +21,9 @@
     "-opencode.provider.*",
     "opencode.provider.snowflake-cortex"
   ],
-  // ~/.cursor/skills is a symlink; OpenCode treats that path as a file.
-  // Point at the real directory so SKILL.md files are discovered.
-  "skills": ["/home/repo/dotfiles/.cursor/skills"],
+  // Use the shared agent-skills directory so Cursor, Codex, and OpenCode all
+  // discover the same SKILL.md files.
+  "skills": ["/home/repo/dotfiles/.agents/skills"],
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "allow" },
     { "action": "edit", "resource": "*", "effect": "allow" }

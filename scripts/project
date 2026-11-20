@@ -443,7 +443,9 @@ def cmd_new(args: argparse.Namespace) -> None:
         die("worktree name must be a simple identifier (got: %s)" % wt_name, 2)
 
     project_dir = PROJECTS / slug
-    if (project_dir / MANIFEST).is_file() or (ARCHIVE / slug / MANIFEST).is_file():
+    if (ARCHIVE / slug / MANIFEST).is_file():
+        die("already archived: %s (project unarchive %s)" % (slug, slug))
+    if (project_dir / MANIFEST).is_file():
         die("project already exists: " + slug)
 
     specs = [parse_spec(s) for s in (args.specs or [])]
@@ -702,6 +704,20 @@ def cmd_archive(args: argparse.Namespace) -> None:
     log("archived " + str(dest))
 
 
+def cmd_unarchive(args: argparse.Namespace) -> None:
+    args.slug = norm_slug(args.slug)
+    project_dir, data = load_project(args.slug)
+    if project_dir.parent != ARCHIVE or data.get("status") != "archived":
+        die("not archived: " + args.slug)
+    dest = PROJECTS / args.slug
+    if dest.exists():
+        die("live destination exists: " + str(dest))
+    shutil.move(str(project_dir), str(dest))
+    data["status"] = "active"
+    dump_json(dest / MANIFEST, data)
+    log("unarchived " + str(dest))
+
+
 def project_public(project_dir: Path, data: dict[str, Any]) -> dict[str, Any]:
     return {
         "slug": data.get("slug", project_dir.name),
@@ -713,10 +729,17 @@ def project_public(project_dir: Path, data: dict[str, Any]) -> dict[str, Any]:
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    rows = [
-        project_public(path, data)
-        for path, data in iter_manifests(active_only=True)
-    ]
+    if args.archived:
+        rows = [
+            project_public(path, data)
+            for path, data in iter_manifests(active_only=False)
+            if data.get("status") == "archived"
+        ]
+    else:
+        rows = [
+            project_public(path, data)
+            for path, data in iter_manifests(active_only=True)
+        ]
     if args.json:
         json.dump(rows, sys.stdout, indent=2)
         sys.stdout.write("\n")
@@ -767,8 +790,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_archive.add_argument("slug")
     p_archive.set_defaults(func=cmd_archive)
 
+    p_unarchive = sub.add_parser(
+        "unarchive",
+        help="restore notes to projects/; does not recreate overlays",
+    )
+    p_unarchive.add_argument("slug")
+    p_unarchive.set_defaults(func=cmd_unarchive)
+
     p_list = sub.add_parser("list", help="list active projects")
     p_list.add_argument("--json", action="store_true")
+    p_list.add_argument(
+        "--archived",
+        action="store_true",
+        help="list archived projects instead of active",
+    )
     p_list.set_defaults(func=cmd_list)
 
     return parser

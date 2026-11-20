@@ -5,5 +5,7 @@ return {
 	bundled_plugins = {
 		zoxide = true,
 		agents = false,
+		windows = false,
+		panes = false,
 	},
 }
