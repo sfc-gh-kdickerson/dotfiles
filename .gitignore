@@ -17,3 +17,6 @@
 **/flake.lock
 .nvim/
 **/__pycache__/
+
+# Installed by terminal-browser setup, not tracked.
+.agents/skills/terminal-browser
