@@ -24,6 +24,16 @@ vim.api.nvim_create_autocmd("LspAttach", {
       vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
     end
 
+    if client and client.name == "pyright" then
+      local file = vim.api.nvim_buf_get_name(bufnr)
+      if file ~= "" then
+        local utils = require("kaleb.utils")
+        if utils.apply_pyright_settings(client.settings, file) then
+          client:notify("workspace/didChangeConfiguration", { settings = client.settings })
+        end
+      end
+    end
+
     -- stylua: ignore start
     vim.keymap.set("n", "K", vim.lsp.buf.hover, { buffer = bufnr, desc = "Hover" })
     vim.keymap.set("n", "<leader>cf", function() vim.lsp.buf.format({ async = false, timeout_ms = 10000 }) end, { buffer = bufnr, desc = "Format Code" })
@@ -63,7 +73,7 @@ return {
     lazy = false,
     dependencies = { "williamboman/mason.nvim", "neovim/nvim-lspconfig" },
     opts = {
-      ensure_installed = lsps,
+      -- ensure_installed = lsps,
       automatic_enable = false,
     },
   },

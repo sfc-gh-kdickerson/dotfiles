@@ -134,6 +134,12 @@ return {
           -- Right islands
           lualine_x = {
             pill({
+              function()
+                return require("kaleb.metals").status()
+              end,
+              icon = { "", color = accent(P.peach) },
+            }),
+            pill({
               utils.python_venv,
               icon = { "󰌠", color = accent(P.yellow) },
             }),

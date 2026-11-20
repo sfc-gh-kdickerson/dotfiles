@@ -1,3 +1,10 @@
+-- GlobalServices uses Metals v2 (tools/ide/metals). jdtls cannot index that tree,
+-- and running both servers duplicates diagnostics.
+local gs = require("kaleb.metals")
+if gs.root(vim.api.nvim_buf_get_name(0)) then
+  return
+end
+
 local home = vim.env.HOME -- Get the home directory
 local project_name = vim.fn.fnamemodify(vim.fn.getcwd(), ":p:h:t")
 local workspace_dir = home .. "/jdtls-workspace/" .. project_name

@@ -25,6 +25,8 @@ vim.o.splitright = true
 vim.opt.conceallevel = 1
 vim.o.winborder = "rounded"
 vim.opt.cmdheight = 0
+-- Experimental message + cmdline UI. Replaces the hit-enter prompt.
+require("vim._core.ui2").enable()
 
 vim.diagnostic.config({
   virtual_text = true,
