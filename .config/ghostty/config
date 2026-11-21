@@ -14,7 +14,8 @@ custom-shader = shaders/cursor_blaze.glsl
 keybind = alt+backspace=text:\x1b\x7f
 keybind = shift+enter=text:\n
 cursor-style-blink = true
-background-opacity = 0.95
+background-opacity = 0.6
 background-opacity-cells = true
 background-blur = false
 background-blur-radius = 4
+background = black
