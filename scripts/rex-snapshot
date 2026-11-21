@@ -205,8 +205,13 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def prune_agent_records() -> None:
-    """Drop records of agents that died without a sessionEnd hook, e.g. a closed pane."""
-    for path in AGENTS.glob("*.json"):
+    """Drop records of agents that died without a sessionEnd hook, e.g. a closed pane.
+
+    Covers rex-picker's agent state too: the Cursor hook keys Rex panes by block
+    UUID (tmux panes use plain numbers, which are left alone).
+    """
+    picker_states = (STATE / "tmux-picker-agents").glob("*-*-*-*-*.json")
+    for path in [*AGENTS.glob("*.json"), *picker_states]:
         try:
             pid = json.loads(path.read_text()).get("pid")
         except (OSError, json.JSONDecodeError):

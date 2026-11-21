@@ -168,7 +168,8 @@ local function window_vars(w)
 	local block = focused_block(w)
 	vars.window_id = w.id
 	vars.window_index = w.index
-	vars.window_name = w.label or ""
+	-- Rex names unlabeled windows "Window <hex>"; tmux-picker hides empty names.
+	vars.window_name = tostring(w.label or ""):match("^Window %x+$") and "" or (w.label or "")
 	vars.window_active = w.id == w.session.active_window_id and 1 or 0
 	vars.window_zoomed_flag = w.zoomed and 1 or 0
 	vars.window_layout = ""

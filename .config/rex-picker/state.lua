@@ -29,7 +29,10 @@ for _, s in ipairs(all.sessions or {}) do
             if p then
               local foreground, child = p.foreground or {}, p.child or {}
               block.cwd = foreground.cwd or child.cwd
-              block.command = foreground.name or child.name
+              -- argv0 names what was run; the process name can be a thread
+              -- name (the agent CLI reports "MainThread").
+              local argv0 = ((foreground.argv0 or ""):match("([^/]+)$") or ""):gsub("^%-", "")
+              block.command = argv0 ~= "" and argv0 or foreground.name or child.name
               block.pid = child.pid
             end
           end
