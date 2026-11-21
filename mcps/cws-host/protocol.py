@@ -2,12 +2,11 @@
 
 from __future__ import print_function
 
+import hashlib
 import json
 import os
 import secrets
 import sys
-
-import hashlib
 
 from lock import state_dir
 
@@ -248,18 +247,111 @@ def upsert_mac_host_mcp(mcp_path, url, token):
     return mcp_path
 
 
+def _toml_string(value):
+    return '"%s"' % (
+        value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    )
+
+
+def _toml_table_keys(inner):
+    inner = inner.strip()
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1].strip()
+    keys = []
+    i = 0
+    n = len(inner)
+    while i < n:
+        while i < n and inner[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        if inner[i] in "\"'":
+            quote = inner[i]
+            i += 1
+            buf = []
+            while i < n:
+                ch = inner[i]
+                if ch == "\\" and i + 1 < n:
+                    buf.append(inner[i + 1])
+                    i += 2
+                    continue
+                if ch == quote:
+                    i += 1
+                    break
+                buf.append(ch)
+                i += 1
+            keys.append("".join(buf))
+        else:
+            j = i
+            while j < n and inner[j] != ".":
+                j += 1
+            keys.append(inner[i:j].strip())
+            i = j
+        while i < n and inner[i].isspace():
+            i += 1
+        if i < n and inner[i] == ".":
+            i += 1
+    return [key for key in keys if key]
+
+
+def _is_mac_host_mcp_table(inner):
+    keys = _toml_table_keys(inner)
+    return len(keys) >= 2 and keys[0] == "mcp_servers" and keys[1] == "mac-host"
+
+
+def _strip_toml_tables(text, predicate):
+    out = []
+    skipping = False
+    for line in text.splitlines(True):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            skipping = predicate(stripped[1:-1])
+        if not skipping:
+            out.append(line)
+    return "".join(out)
+
+
+def _codex_mac_host_section(url, token):
+    return (
+        "[mcp_servers.mac-host]\n"
+        "url = %s\n"
+        "\n"
+        "[mcp_servers.mac-host.http_headers]\n"
+        "Authorization = %s\n"
+    ) % (_toml_string(url), _toml_string("Bearer %s" % token))
+
+
+def upsert_codex_mac_host_mcp(config_path, url, token):
+    """Merge mac-host into a Codex user-level config.toml. Leave other keys alone."""
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    text = ""
+    if os.path.exists(config_path):
+        with open(config_path, "r") as fh:
+            text = fh.read()
+    text = _strip_toml_tables(text, _is_mac_host_mcp_table).rstrip()
+    if text:
+        text += "\n\n"
+    text += _codex_mac_host_section(url, token)
+    tmp = config_path + ".tmp"
+    with open(tmp, "w") as fh:
+        fh.write(text)
+    os.replace(tmp, config_path)
+    return config_path
+
+
 def _cli(argv):
     if len(argv) >= 2 and argv[1] == "upsert-mcp":
         token = read_token()
         if not token:
             eprint("missing token")
             sys.exit(1)
-        path = upsert_mac_host_mcp(
-            os.path.expanduser("~/.cursor/mcp.json"),
-            "http://127.0.0.1:%d/mcp" % FACADE_PORT,
-            token,
+        url = "http://127.0.0.1:%d/mcp" % FACADE_PORT
+        print(upsert_mac_host_mcp(os.path.expanduser("~/.cursor/mcp.json"), url, token))
+        print(
+            upsert_codex_mac_host_mcp(
+                os.path.expanduser("~/.codex/config.toml"), url, token
+            )
         )
-        print(path)
         return
     eprint("usage: protocol.py upsert-mcp")
     sys.exit(2)
