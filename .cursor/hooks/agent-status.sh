@@ -27,7 +27,32 @@ source "$PID_LIB"
 
 command -v jq >/dev/null 2>&1 || exit 0
 
+# lib-cursor-pid.sh only knows `agent --use-system-ca .../index.js`; newer CLI
+# builds run as `agent .../cursor-agent/versions/<v>/index.js`.
+find_agent_cli_pid() {
+  pid="$PPID"
+  depth=8
+  set -f
+  while [ "$depth" -gt 0 ] && [ "${pid:-0}" -gt 1 ]; do
+    # shellcheck disable=SC2046 # deliberate split of ps's flattened argv
+    set -- $(ps -o args= -p "$pid" 2>/dev/null)
+    first="${1:-}"
+    case "${first##*/}:${2:-}" in
+      agent:*/cursor-agent/*/index.js | cursor-agent:*)
+        set +f
+        printf '%s\n' "$pid"
+        return 0
+        ;;
+    esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    depth=$((depth - 1))
+  done
+  set +f
+  return 1
+}
+
 CURSOR_PID=$(find_cursor_pid || true)
+[ -n "$CURSOR_PID" ] || CURSOR_PID=$(find_agent_cli_pid || true)
 
 STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/tmux-picker-agents"
 INPUT=$(cat)
@@ -88,7 +113,7 @@ rex_report() {
   [ -w "/dev/$tty" ] || return 0
   body="state=$1:app=cursor"
   if [ -n "${2:-}" ]; then
-    msg=$(jq -rn --arg s "$2" '$s | gsub("[\\u0000-\\u001f\\u007f-\\u009f]"; " ") | .[0:160] | @base64') || msg=""
+    msg=$(jq -rn --arg s "$2" '$s | explode | map(if . < 32 or (. >= 127 and . < 160) then 32 else . end) | implode | .[0:160] | @base64') || msg=""
     [ -n "$msg" ] && body="$body:msg=$msg"
   fi
   printf '\033]7501;%s\033\\' "$body" >"/dev/$tty" 2>/dev/null || true
