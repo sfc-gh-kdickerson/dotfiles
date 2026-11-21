@@ -378,7 +378,7 @@ echo "Do not copy Cursor auth.json. If the new box is logged out: sfid -l cursor
 echo "Missing dest dirs for a hash's cwd will not resume until that path exists (declare it in config.star or recreate the worktree)."
 if launchctl print "gui/$UID/com.kdickerson.cws-link" >/dev/null 2>&1; then
   "$HOME/dotfiles/scripts/cws-link" use "$new"
-  echo "Then: open $new in Rex (rex hosts add $new ssh://$USER@$new if it is not listed), or connect $new for tmux."
+  echo "Then: point Rex at $new (rex hosts edit cws --endpoint ssh://$USER@$new), or connect $new for tmux."
 else
   echo "Then: cws-link install $new (Rex) or connect $new (tmux)."
 fi

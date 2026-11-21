@@ -177,10 +177,11 @@ git -C /home/repo/snowml worktree add -b <branch> /home/repo/wt-<name> origin/<b
 The script also copies each project's `.workspace-trusted` and MCP
 approvals, sets up `rex.socket`, linger, and `rex-snapshot.service` on the
 new box, and runs `cws-link use <new>` when the launchd job is installed.
-Then add the Rex host if it is missing:
+Then point the Mac app's single `cws` Rex host at the new box (adding a
+second host instead leaves a duplicate the app keeps re-adding):
 
 ```bash
-rex hosts add <new> ssh://kdickerson@<new>
+rex hosts edit cws --endpoint ssh://kdickerson@<new>
 cws-link status            # tunnel ready, facade active, ssh-agent forward working
 ```
 
