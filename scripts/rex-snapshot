@@ -190,9 +190,21 @@ def write_json(path: Path, data: dict) -> None:
     tmp.replace(path)
 
 
+def prune_agent_records() -> None:
+    """Drop records of agents that died without a sessionEnd hook, e.g. a closed pane."""
+    for path in AGENTS.glob("*.json"):
+        try:
+            pid = json.loads(path.read_text()).get("pid")
+        except (OSError, json.JSONDecodeError):
+            pid = None
+        if not isinstance(pid, int) or not pid_alive(pid):
+            path.unlink(missing_ok=True)
+
+
 def save(instance_id: str | None = None) -> dict:
     if instance_id is None:
         instance_id = rex("server", "status", "--json")["instance_id"]
+    prune_agent_records()
     sessions = []
     for session in (rex("ls", "--json") or {}).get("sessions") or []:
         try:
