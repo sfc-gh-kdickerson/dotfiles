@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+"""Save this machine's Rex sessions and rebuild them after the server restarts.
+
+Rex keeps sessions while clients come and go, but not across a restart of the
+server or the machine. `watch` saves each session's tabs, split layout, working
+directories, and the agent conversation or program in each pane. When it finds
+a new server with no sessions, it rebuilds the last snapshot: agents come back
+with `agent --resume`, a few programs (nvim, lazygit, ...) are started again,
+and everything else is a shell in the pane's directory.
+
+Usage: rex-snapshot save | watch | restore [--dry-run] [FILE] | show [FILE]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+HOME = Path.home()
+REX = os.environ.get("REX_CLI") or shutil.which("rex") or str(HOME / ".local/bin/rex")
+STATE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state")
+SNAP_DIR = STATE / "rex-snapshot"
+LAST = SNAP_DIR / "last.json"
+AGENTS = STATE / "rex-agents"
+KEEP = 30
+INTERVAL = 15
+
+TERMINAL = "com.superlogical.terminal"
+SHELL_FLAVOR = "com.superlogical.terminal.shell"
+AGENT_PROGRAMS = {"agent", "cursor-agent"}
+RESTORE_PROGRAMS = {"nvim", "vim", "vi", "lazygit", "htop", "btop", "top", "k9s", "less", "man", "watch"}
+DEFAULT_BLOCK_LABELS = {"", "shell"}
+
+
+class RexError(Exception):
+    pass
+
+
+def log(message: str) -> None:
+    stamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    print("%s rex-snapshot: %s" % (stamp, message), file=sys.stderr, flush=True)
+
+
+def rex(*args: str, stdin: str | None = None):
+    proc = subprocess.run(
+        [REX, "--autostart=false", *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        raise RexError((proc.stderr or proc.stdout).strip() or "rex %s failed" % " ".join(args))
+    out = proc.stdout.strip()
+    return json.loads(out) if out else None
+
+
+def cmdline(pid: int) -> list[str]:
+    try:
+        raw = Path("/proc/%d/cmdline" % pid).read_bytes()
+    except OSError:
+        return []
+    return [part.decode(errors="replace") for part in raw.split(b"\0") if part]
+
+
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def agent_conversation(block_id: str) -> str | None:
+    path = AGENTS / ("%s.json" % block_id.split(":", 1)[-1])
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    pid = record.get("pid")
+    if not isinstance(pid, int) or not pid_alive(pid):
+        return None
+    if not any("agent" in part for part in cmdline(pid)[:3]):
+        return None
+    return record.get("conversation_id") or None
+
+
+def describe_block(session_id: str, block: dict) -> dict:
+    entry: dict = {}
+    label = block.get("label") or ""
+    if label not in DEFAULT_BLOCK_LABELS:
+        entry["label"] = label
+    if block.get("creator_name") != TERMINAL:
+        return entry
+    block_id = block["block_id"]
+    try:
+        info = rex("block", "call", "-s", session_id, "-b", block_id, "process") or {}
+    except RexError:
+        return entry
+    child = info.get("child") or {}
+    foreground = info.get("foreground") or {}
+    cwd = foreground.get("cwd") or child.get("cwd")
+    if cwd:
+        entry["cwd"] = cwd
+    conversation = agent_conversation(block_id)
+    if conversation:
+        entry["agent"] = conversation
+        return entry
+    fg_pid = foreground.get("pid")
+    if fg_pid:
+        argv = cmdline(fg_pid)
+        if argv and Path(argv[0]).name in RESTORE_PROGRAMS:
+            entry["command"] = user_command(argv)
+    return entry
+
+
+def user_command(argv: list[str]) -> list[str]:
+    """Name the program as typed so PATH finds its wrapper; drop the wrapper's --cmd."""
+    name = Path(argv[0]).name
+    args = argv[1:]
+    if name in {"nvim", "vim", "vi"}:
+        kept = []
+        skip = False
+        for arg in args:
+            if skip:
+                skip = False
+            elif arg == "--cmd":
+                skip = True
+            else:
+                kept.append(arg)
+        args = kept
+    return [name, *args]
+
+
+def describe_layout(session_id: str, node: dict, blocks: dict) -> dict:
+    split = node.get("split")
+    if split:
+        return {
+            "split": {
+                "direction": split["direction"],
+                "ratio": split.get("ratio", 0.5),
+                "before": describe_layout(session_id, split["before"], blocks),
+                "after": describe_layout(session_id, split["after"], blocks),
+            }
+        }
+    block = blocks.get(node.get("block_id"), {"block_id": node.get("block_id")})
+    return {"block": describe_block(session_id, block)}
+
+
+def describe_session(session: dict) -> dict | None:
+    view = rex("session", "inspect", session["session_id"], "--json")
+    windows = []
+    active = 0
+    for window in view.get("windows") or []:
+        tiled = next((layer for layer in window.get("layers") or [] if layer.get("kind") == "tiled"), None)
+        if not tiled or not tiled.get("layout"):
+            continue
+        blocks = {block["block_id"]: block for block in tiled.get("blocks") or []}
+        if window.get("window_id") == view.get("active_window_id"):
+            active = len(windows)
+        entry = {"layout": describe_layout(view["session_id"], tiled["layout"], blocks)}
+        label = window.get("label") or ""
+        if label and not label.startswith("Window "):
+            entry["label"] = label
+        windows.append(entry)
+    if not windows:
+        return None
+    return {"label": view.get("label") or session.get("label"), "active_window": active, "windows": windows}
+
+
+def read_snapshot(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)
+
+
+def save(instance_id: str | None = None) -> dict:
+    if instance_id is None:
+        instance_id = rex("server", "status", "--json")["instance_id"]
+    sessions = []
+    for session in (rex("ls", "--json") or {}).get("sessions") or []:
+        try:
+            described = describe_session(session)
+        except RexError as exc:
+            log("skipping %s: %s" % (session.get("label"), exc))
+            continue
+        if described:
+            sessions.append(described)
+    previous = read_snapshot(LAST) or {}
+    snapshot = {
+        "version": 1,
+        "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "instance_id": instance_id,
+        "sessions": sessions,
+    }
+    changed = previous.get("sessions") != sessions
+    if changed and sessions:
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        write_json(SNAP_DIR / ("snapshot-%s.json" % stamp), snapshot)
+        for old in sorted(SNAP_DIR.glob("snapshot-*.json"))[:-KEEP]:
+            old.unlink(missing_ok=True)
+    if changed or previous.get("instance_id") != instance_id:
+        write_json(LAST, snapshot)
+    return snapshot
+
+
+def restore_block(entry: dict) -> dict:
+    options: dict = {}
+    cwd = entry.get("cwd")
+    if cwd and os.path.isdir(cwd):
+        options["cwd"] = cwd
+    if entry.get("agent"):
+        options["initial_input"] = "agent --resume %s\r" % shlex.quote(entry["agent"])
+    elif entry.get("command"):
+        options["initial_input"] = " ".join(shlex.quote(part) for part in entry["command"]) + "\r"
+    block: dict = {"flavor": SHELL_FLAVOR}
+    if options:
+        block["options"] = options
+    if entry.get("label"):
+        block["label"] = entry["label"]
+    return block
+
+
+def restore_layout(node: dict) -> dict:
+    split = node.get("split")
+    if split:
+        return {
+            "split": {
+                "direction": split["direction"],
+                "ratio": split.get("ratio", 0.5),
+                "before": restore_layout(split["before"]),
+                "after": restore_layout(split["after"]),
+            }
+        }
+    return {"block": restore_block(node.get("block") or {})}
+
+
+def restore(snapshot: dict, dry_run: bool = False) -> int:
+    existing = {s.get("label") for s in (rex("ls", "--json") or {}).get("sessions") or []}
+    restored = 0
+    for session in snapshot.get("sessions") or []:
+        label = session.get("label")
+        if label in existing:
+            log("session %s already exists; leaving it" % label)
+            continue
+        windows = []
+        for window in session.get("windows") or []:
+            item = {"layout": restore_layout(window["layout"])}
+            if window.get("label"):
+                item["window_label"] = window["label"]
+            windows.append(item)
+        request = {"label": label, "initial_windows": windows}
+        if dry_run:
+            print(json.dumps(request, indent=2))
+            continue
+        try:
+            created = rex("api", "call", "session.create", "-", stdin=json.dumps(request))
+        except RexError as exc:
+            log("could not restore %s: %s" % (label, exc))
+            continue
+        made = created.get("initial_windows") or []
+        active = session.get("active_window", 0)
+        if 0 <= active < len(made):
+            try:
+                rex("api", "call", "-s", created["session_id"], "session.focus_window",
+                    json.dumps({"window_id": made[active]["window_id"]}))
+            except RexError:
+                pass
+        restored += 1
+        log("restored %s (%d windows)" % (label, len(windows)))
+    return restored
+
+
+def watch() -> None:
+    log("watching (every %ds, snapshots in %s)" % (INTERVAL, SNAP_DIR))
+    while True:
+        try:
+            status = rex("server", "status", "--json")
+            instance = status["instance_id"]
+            last = read_snapshot(LAST)
+            if (
+                status.get("session_count") == 0
+                and last
+                and last.get("sessions")
+                and last.get("instance_id") != instance
+            ):
+                log("server %s started empty; restoring %s" % (instance, last.get("saved_at")))
+                restore(last)
+            save(instance)
+        except (RexError, subprocess.TimeoutExpired, KeyError, json.JSONDecodeError) as exc:
+            log("cycle failed: %s" % exc)
+        time.sleep(INTERVAL)
+
+
+def summarize(snapshot: dict) -> None:
+    print("saved %s (server %s)" % (snapshot.get("saved_at"), snapshot.get("instance_id")))
+
+    def panes(node: dict) -> list[dict]:
+        split = node.get("split")
+        if split:
+            return panes(split["before"]) + panes(split["after"])
+        return [node.get("block") or {}]
+
+    for session in snapshot.get("sessions") or []:
+        print(session.get("label"))
+        for window in session.get("windows") or []:
+            print("  %s" % (window.get("label") or "(tab)"))
+            for pane in panes(window["layout"]):
+                what = ("agent " + pane["agent"]) if pane.get("agent") else " ".join(pane.get("command") or ["shell"])
+                print("    %s  %s" % (pane.get("cwd", "~"), what))
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="rex-snapshot", description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("save", help="save the current sessions now")
+    sub.add_parser("watch", help="save periodically and restore after a restart")
+    p_restore = sub.add_parser("restore", help="rebuild sessions that are missing")
+    p_restore.add_argument("file", nargs="?", type=Path, default=LAST)
+    p_restore.add_argument("--dry-run", action="store_true", help="print the requests only")
+    p_show = sub.add_parser("show", help="summarize a snapshot")
+    p_show.add_argument("file", nargs="?", type=Path, default=LAST)
+    args = parser.parse_args(argv[1:])
+
+    if args.cmd == "save":
+        summarize(save())
+    elif args.cmd == "watch":
+        watch()
+    elif args.cmd == "restore":
+        snapshot = read_snapshot(args.file)
+        if not snapshot:
+            print("no snapshot at %s" % args.file, file=sys.stderr)
+            return 1
+        restore(snapshot, dry_run=args.dry_run)
+    elif args.cmd == "show":
+        snapshot = read_snapshot(args.file)
+        if not snapshot:
+            print("no snapshot at %s" % args.file, file=sys.stderr)
+            return 1
+        summarize(snapshot)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,12 @@
+[Unit]
+Description=Save Rex sessions and restore them after a restart
+After=rex.socket
+Wants=rex.socket
+
+[Service]
+ExecStart=%h/scripts/rex-snapshot watch
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
