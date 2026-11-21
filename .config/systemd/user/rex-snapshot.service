@@ -5,6 +5,8 @@ Wants=rex.socket
 
 [Service]
 ExecStart=%h/scripts/rex-snapshot watch
+StandardOutput=append:%h/.local/state/rex-snapshot/watch.log
+StandardError=append:%h/.local/state/rex-snapshot/watch.log
 Restart=always
 RestartSec=10
 

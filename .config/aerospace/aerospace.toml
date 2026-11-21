@@ -24,7 +24,7 @@ outer.right =      12
 outer.top = [
     { monitor."DELL S2721Q"    = 45 },
     { monitor."DELL P2723DE"   = 48 },
-    { monitor."LS34A650U"      = 50 },
+    { monitor."LS34A650U"      = 43 },
     { monitor."^Built-in.*"    = 16 }, # built-in display (MacBook screen)
     { monitor."^(?!Built-in).*"= 40 }, # default for any unknown monitor
     0                                  # should be unreachable but satisfies syntax
@@ -85,7 +85,7 @@ alt-g = ["exec-and-forget open -a 'Ghostty'"]
 alt-m = ["exec-and-forget open -a 'Gmail'"]
 alt-c = ["exec-and-forget open -a 'Google Calendar'"]
 alt-b = ["exec-and-forget open -a 'Cursor'"]
-alt-ctrl-space = ['exec-and-forget open -a "Gemini"']
+alt-ctrl-space = ['exec-and-forget open -a "ChatGPT"']
 
 [mode.resize.binding]
 h = 'resize width -50'
@@ -96,7 +96,7 @@ enter = 'mode main'
 esc = 'mode main'
 
 [[on-window-detected]]
-if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|quicktime player|1password|cafe|gemini|graphite)'
+if.app-name-regex-substring = '(messages|weather|calendar|finder|find my|mail|spotify|bitwarden|quicktime player|1password|cafe|gemini|graphite|chatgpt)'
 run = ['layout floating']
 
 [[on-window-detected]]
