@@ -12,7 +12,7 @@
 # status to the agent's terminal and records the pane's conversation for rex-snapshot.
 #
 # State: $XDG_STATE_HOME/tmux-picker-agents/<pane-id-without-%>.json
-# Join key is TMUX_PANE (%N), same as tmux-picker's pane target.
+# Join key is TMUX_PANE (%N), same as tmux-picker's pane target; %<block uuid> in Rex.
 # kind=cursor routes the row to .config/tmux-picker/agents/cursor.lua.
 # conversation_id joins ~/.config/cursor/chats/*/<id>/meta.json for the title.
 
@@ -147,6 +147,13 @@ if [ -n "${REX_BLOCK:-}" ]; then
       '{block: $block, conversation_id: $conversation, pid: $pid}' >"$rex_agent_file.tmp" 2>/dev/null \
       && mv "$rex_agent_file.tmp" "$rex_agent_file" || rm -f "$rex_agent_file.tmp"
   fi
+fi
+
+# rex-picker's agents view reads the same state, keyed by "%<block uuid>". REX_BLOCK
+# comes from the pane the agent started in; rex-picker checks the pid against it.
+if [ -n "${REX_BLOCK:-}" ] && [ -z "${TMUX:-}" ]; then
+  TMUX_PANE="%${REX_BLOCK#block:}"
+  pane_owns_pid() { [ -n "$2" ]; }
 fi
 
 # sessionEnd must run even when the CLI pid walk fails (hard-kill, dying parent).

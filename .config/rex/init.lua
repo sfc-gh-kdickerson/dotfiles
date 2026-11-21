@@ -108,7 +108,6 @@ rex.action{
 -- Windows in tmux are tabs in Rex; both count from 1 here.
 bind("c", "client.tab.new")
 bind("n", "client.tab.next")
-bind("p", "client.tab.previous")
 bind("ctrl+n", "client.tab.next")
 bind("ctrl+p", "client.tab.previous")
 for index = 1, 9 do
@@ -301,6 +300,43 @@ rex.action{
   end,
 }
 bind("g", "lazygit_popup")
+
+-- tmux-picker's views (snowbox projects, Cursor agents, sessions) through
+-- ~/scripts/rex-picker, run on the host of the focused session.
+local picker_bounds = { 0.15, 0.10, 0.70, 0.80 }
+rex.action{
+  name = "picker_popup",
+  title = "Open Picker Popup",
+  args = { view = "string" },
+  run = function(ctx, args)
+    local view = assert(rex.session.view{})
+    for _, window in ipairs(view.windows) do
+      if window.window_id == view.active_window_id and window.zoomed_block_id then
+        assert(rex.session.zoom_block{ block_id = window.zoomed_block_id, zoom = false })
+      end
+    end
+    local launch = [[
+picker="$HOME/scripts/rex-picker"
+if [ -x "$picker" ]; then exec "$picker" "$1"; fi
+echo "rex-picker is not installed on this host"; sleep 2
+]]
+    assert(rex.session.new_layer{
+      bounds = picker_bounds,
+      focus = true,
+      layout = { block = {
+        flavor = "com.superlogical.terminal.shell",
+        label = "rex-picker-popup",
+        options = {
+          command = { "/bin/sh", "-c", launch, "rex-picker", args.view },
+          shell = "none",
+          exit = { on_completion = true },
+        },
+      } },
+    })
+  end,
+}
+bind("p", "picker_popup", { view = "projects" })
+bind("e", "picker_popup", { view = "agents" })
 
 bind("[", "pane.copy_mode.enter")
 

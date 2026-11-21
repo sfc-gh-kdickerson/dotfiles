@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# tmux-picker in Rex: the same fzf views and ~/.config/tmux-picker plugins, with
+# ~/.config/rex-picker/lua/tmux_picker/tmux.lua answering through the Rex server.
+# init.lua opens it in a floating pane (prefix p: projects, prefix e: agents).
+#
+#   rex-picker [VIEW]    open the picker (projects, agents, sessions, zoxide)
+#   rex-picker doctor    check views and plugins
+set -eu
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  dir="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in /*) ;; *) SOURCE="${dir}/${SOURCE}" ;; esac
+done
+SELF="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)/$(basename "$SOURCE")"
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/rex-picker"
+ROOT="${TMUX_PICKER_ROOT:-$HOME/.tmux/plugins/tmux-picker}"
+# Popups start from the Rex server's environment, not a login shell.
+PATH="$HOME/scripts:$HOME/.local/bin:$HOME/.nix-profile/bin:$HOME/.npm-global/bin:$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:${PATH:-/usr/bin:/bin}"
+export PATH
+
+fail() {
+  printf 'rex-picker: %s\n' "$1" >&2
+  if [ "$interactive" = 1 ]; then
+    printf 'press any key to close' >&2
+    read -rsn1 _ </dev/tty || true
+  fi
+  exit 1
+}
+
+case "${1:-}" in
+  list | current | preview | switch-view | action | execute-action | fzf-enter | fzf-escape | kill | doctor) interactive=0 ;;
+  *) interactive=1 ;;
+esac
+
+[ -d "$ROOT/lua/tmux_picker" ] || fail "tmux-picker is not installed at $ROOT"
+LUA_BIN="$(command -v luajit || command -v lua || true)"
+[ -n "$LUA_BIN" ] || fail "luajit or lua not found"
+command -v rex >/dev/null || fail "rex not found"
+
+unset TMUX TMUX_PANE
+export TMUX_PICKER_ROOT="$ROOT"
+export TMUX_PICKER_CMD="$SELF"
+export REX_PICKER_STATE="$CONF/state.lua"
+export LUA_PATH="$CONF/lua/?.lua;$ROOT/lua/?.lua;$ROOT/lua/?/init.lua;;"
+
+if [ "$interactive" = 0 ]; then
+  exec "$LUA_BIN" "$CONF/main.lua" "$@"
+fi
+
+# fzf may draw on stderr, so errors print to the popup itself.
+"$LUA_BIN" "$CONF/main.lua" "$@" || fail "picker failed"
