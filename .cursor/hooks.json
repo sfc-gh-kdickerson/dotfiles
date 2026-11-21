@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "bash \"$HOME\"'/.tmux/plugins/tmux-assistant-resurrect/hooks/cursor-session-track.sh'"
+      },
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "bash \"$HOME\"'/.tmux/plugins/tmux-assistant-resurrect/hooks/cursor-session-cleanup.sh'"
+      },
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": "hooks/agent-status.sh"
+      }
+    ]
+  }
+}
+
