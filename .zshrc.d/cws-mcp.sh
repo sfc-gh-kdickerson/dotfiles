@@ -28,6 +28,10 @@ curl -fsS -m 3 http://127.0.0.1:18765/health >/dev/null || exit 1
 "
 }
 
+cws-link() {
+  "${HOME}/dotfiles/scripts/cws-link" "$@"
+}
+
 _cws_mcp_usage() {
   print -r -- "usage: cws-mcp up <workspace_id> | cws-mcp status [workspace_id] | cws-mcp down [workspace_id]" >&2
 }

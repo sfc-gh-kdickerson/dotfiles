@@ -27,7 +27,7 @@ Copy this checklist:
 - [ ] ~/.snowflake/connections.toml + config.toml, ~/.config/graphite/auth
 - [ ] Stop agents on the old box
 - [ ] cws-handoff OLD NEW
-- [ ] leftovers + connect
+- [ ] leftovers + Rex host (or connect for tmux)
 ```
 
 ### 1. Preflight
@@ -174,7 +174,23 @@ git -C /home/repo/snowml fetch origin '+refs/heads/<branch>:refs/remotes/origin/
 git -C /home/repo/snowml worktree add -b <branch> /home/repo/wt-<name> origin/<branch>
 ```
 
-Then:
+The script also copies each project's `.workspace-trusted` and MCP
+approvals, sets up `rex.socket`, linger, and `rex-snapshot.service` on the
+new box, and runs `cws-link use <new>` when the launchd job is installed.
+Then add the Rex host if it is missing:
+
+```bash
+rex hosts add <new> ssh://kdickerson@<new>
+cws-link status            # tunnel ready, facade active, ssh-agent forward working
+```
+
+`cws-link` (launchd) replaces typing `connect`: it keeps the Mac MCP tunnel
+and the `sf` ssh session that forwards ssh-agent and dev-daemon up. Rex's own
+ssh clears all forwards, so without it git over ssh fails on the box. If the
+old box ran `rex-snapshot`, the new empty server restores its Rex sessions
+(agents via `agent --resume`) within 15 seconds.
+
+For tmux instead:
 
 ```bash
 connect <new>
@@ -184,7 +200,11 @@ First tmux start loads the stowed conf. Continuum restores layout only.
 Do not add `agent` to `@resurrect-processes` — that starts a fresh chat and
 blocks the assistant hook.
 
-Upstream assistant-resurrect already detects Cursor CLI. If the probe shows
+Upstream assistant-resurrect's `lib-cursor-pid.sh` only matches the older
+`agent --use-system-ca …/index.js` argv. Newer CLI builds run as
+`agent …/cursor-agent/versions/<v>/index.js` and are missed;
+`.cursor/hooks/agent-status.sh` has its own fallback, the plugin does not.
+If the probe shows
 `assistant_sessions` near-empty while agents are running, the `sessionStart`
 hook never wrote sidecars (typical for processes started before TPM installed
 the hook). Restart those agents once on the old box if you want

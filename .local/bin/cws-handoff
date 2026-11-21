@@ -13,8 +13,10 @@ Probe (default when <new> is omitted, or with --dry-run):
 
 Copy (when <new> is given without --dry-run):
   active-cwd chats (or all with --all-chats), agent-transcripts, plans,
-  tmux last + assistant-sessions.json, ~/.config/graphite/auth,
+  per-project workspace trust + MCP approvals, tmux last +
+  assistant-sessions.json, the Rex session snapshot, ~/.config/graphite/auth,
   ~/.snowflake/connections.toml, ~/.snowflake/config.toml.
+  Then sets up the Rex server + rex-snapshot on <new> and points cws-link at it.
 
 Refuses a live copy while agents are running (--force) or while declared
 repos / extra worktrees / /src|wt-* checkouts are dirty or unpushed
@@ -329,6 +331,34 @@ if ssh_ws "$old" 'test -d ~/.cursor/plans'; then
   rsync_ws "$old:.cursor/plans/" "$new:.cursor/plans/"
 fi
 
+echo "copy workspace trust + MCP approvals"
+# Without these, the agent asks to trust every directory and approve every MCP again.
+ssh_ws "$old" 'cd ~/.cursor/projects 2>/dev/null && find . -mindepth 2 -maxdepth 2 -type f \( -name .workspace-trusted -o -name mcp-approvals.json -o -name mcp-disabled.json -o -name repo.json \) -print0 | tar --null -T - -czf -' \
+  | ssh_ws "$new" 'cd ~/.cursor/projects && tar --skip-old-files -xzf -' \
+  || echo "cws-handoff: could not copy trust/approval files" >&2
+
+echo "rex server + rex-snapshot"
+if ! ssh_ws "$new" 'test -x ~/.local/bin/rex' && ssh_ws "$old" 'test -x ~/.local/bin/rex'; then
+  ssh_ws "$new" 'mkdir -p ~/.local/bin'
+  rsync_ws "$old:.local/bin/rex" "$new:.local/bin/rex"
+fi
+if ssh_ws "$old" 'test -f ~/.local/state/rex-snapshot/last.json'; then
+  # A new, empty Rex server restores this through rex-snapshot watch.
+  ssh_ws "$new" 'mkdir -p ~/.local/state/rex-snapshot'
+  rsync_ws "$old:.local/state/rex-snapshot/last.json" "$new:.local/state/rex-snapshot/last.json"
+fi
+ssh_ws "$new" 'bash -s' <<'EOF' || echo "cws-handoff: rex setup on the new box failed; see the skill" >&2
+set -e
+export PATH="$HOME/.local/bin:$PATH"
+command -v rex >/dev/null || { echo "rex is not installed"; exit 1; }
+systemctl --user is-enabled --quiet rex.socket 2>/dev/null || { rex server install; systemctl --user enable --now rex.socket; }
+loginctl show-user "$USER" -p Linger | grep -q yes || sudo -n loginctl enable-linger "$USER"
+if [ -e ~/.config/systemd/user/rex-snapshot.service ]; then
+  systemctl --user daemon-reload
+  systemctl --user enable --now rex-snapshot.service
+fi
+EOF
+
 last_target=$(printf '%s\n' "$probe_out" | awk '/^LAST_TARGET / {print $2}')
 if [[ -n "$last_target" ]]; then
   echo "rsync tmux last ($last_target)"
@@ -346,4 +376,9 @@ printf '%s\n' "$probe_out" | awk '/^BEGIN_DIRTY$/,/^END_DIRTY$/'
 echo
 echo "Do not copy Cursor auth.json. If the new box is logged out: sfid -l cursor on the Mac."
 echo "Missing dest dirs for a hash's cwd will not resume until that path exists (declare it in config.star or recreate the worktree)."
-echo "Then: connect $new"
+if launchctl print "gui/$UID/com.kdickerson.cws-link" >/dev/null 2>&1; then
+  "$HOME/dotfiles/scripts/cws-link" use "$new"
+  echo "Then: open $new in Rex (rex hosts add $new ssh://$USER@$new if it is not listed), or connect $new for tmux."
+else
+  echo "Then: cws-link install $new (Rex) or connect $new (tmux)."
+fi
