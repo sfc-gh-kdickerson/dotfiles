@@ -1,0 +1,293 @@
+#!/bin/zsh
+# Keep the Mac side of a cloud workspace connected without a terminal:
+# the Mac host MCP, its reverse tunnel, and the sf ssh session that forwards
+# ssh-agent and dev-daemon sockets (Rex's own ssh clears all forwards).
+# launchd runs `cws-link run`; `connect` and `cws-mcp` keep working beside it
+# because they share the same lock and ready files.
+
+DOTFILES="${DOTFILES:-$HOME/dotfiles}"
+source "$DOTFILES/.zshrc.d/cws-host.sh" || exit 1
+
+LABEL=com.kdickerson.cws-link
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+STATE="$(_cws_host_state)"
+LOG="$STATE/link.log"
+SCRIPT="$DOTFILES/scripts/cws-link"
+UNIT=cws-host-facade.service
+NOTIFY_EVERY=1800
+READY_GRACE=90
+
+log() {
+  print -r -- "$(date '+%Y-%m-%dT%H:%M:%S') cws-link: $*" >&2
+}
+
+notify() {
+  local stamp="$STATE/link.notified" now last
+  now=$(date +%s)
+  last=$(stat -f %m "$stamp" 2>/dev/null || print 0)
+  (( now - last < NOTIFY_EVERY )) && return 0
+  touch "$stamp"
+  osascript -e "display notification \"$1\" with title \"cws-link\"" >/dev/null 2>&1 || true
+}
+
+creds_ok() {
+  command sf auth check </dev/null 2>&1 | grep -q 'Cloud Workspace SSH\.\.\. OK'
+}
+
+# Exit 42 when the uploaded tree does not match the Mac's.
+remote_ensure() {
+  local id="$1" hash="$2" restart="$3"
+  command sf --log-level error ws ssh "$id" --options "-n -o BatchMode=yes" --command "
+dir=\$HOME/.local/share/cws-host-mcp
+if [ ! -f \"\$dir/tree.sha\" ] || [ \"\$(cat \"\$dir/tree.sha\")\" != \"$hash\" ]; then
+  exit 42
+fi
+units=\$HOME/.config/systemd/user
+mkdir -p \"\$units\"
+cat >\"\$units/$UNIT.new\" <<'UNIT'
+[Unit]
+Description=CWS host MCP facade (Mac tools for agents; managed by cws-link)
+ConditionPathExists=%h/.local/share/cws-host-mcp/facade.py
+
+[Service]
+WorkingDirectory=%h/.local/share/cws-host-mcp
+Environment=PYTHONPATH=.
+ExecStartPre=-/usr/bin/python3 protocol.py upsert-mcp
+ExecStart=/usr/bin/python3 facade.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+if cmp -s \"\$units/$UNIT.new\" \"\$units/$UNIT\"; then
+  rm -f \"\$units/$UNIT.new\"
+else
+  mv \"\$units/$UNIT.new\" \"\$units/$UNIT\"
+  systemctl --user daemon-reload
+fi
+systemctl --user enable --quiet $UNIT
+main=\$(systemctl --user show -p MainPID --value $UNIT)
+held=\$(cat \"\$dir/facade.lock\" 2>/dev/null)
+if [ -n \"\$held\" ] && [ \"\$held\" != \"\$main\" ] && kill -0 \"\$held\" 2>/dev/null; then
+  kill \"\$held\" 2>/dev/null || true
+  sleep 1
+fi
+if [ \"$restart\" = 1 ]; then
+  systemctl --user restart $UNIT
+else
+  systemctl --user start $UNIT
+fi
+i=0
+while [ \$i -lt 25 ]; do
+  curl -fsS -m 1 http://127.0.0.1:18765/health >/dev/null 2>&1 && exit 0
+  sleep 0.2
+  i=\$((i + 1))
+done
+exit 1
+"
+}
+
+ensure_remote() {
+  local id="$1" hash="$2" st
+  remote_ensure "$id" "$hash" 0
+  st=$?
+  if (( st == 42 )); then
+    log "uploading tree ${hash[1,12]} to $id"
+    _cws_host_upload "$id" || return 1
+    remote_ensure "$id" "$hash" 1
+    st=$?
+  fi
+  return $st
+}
+
+wait_for_creds() {
+  local id="$1"
+  until creds_ok; do
+    log "cloud workspace ssh cert is not valid; waiting for sf auth login"
+    notify "Run sf auth login to reconnect $id"
+    sleep 120
+    [[ "$(_cws_host_last_workspace 2>/dev/null)" == "$id" ]] || return 1
+  done
+  return 0
+}
+
+tunnel_owner() {
+  local pid
+  pid="$(cat "$STATE/tunnel-$1.lock" 2>/dev/null || true)"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && print -r -- "$pid"
+}
+
+child=""
+stop_child() {
+  [[ -n "$child" ]] || return 0
+  kill "$child" 2>/dev/null
+  wait "$child" 2>/dev/null
+  child=""
+}
+
+# Supervise one workspace until it changes or something needs a rebuild.
+link_once() {
+  local id="$1" hash owner since now src
+  src="$(_cws_host_src)" || return 1
+  _cws_host_ensure_token || return 1
+  hash="$(_cws_host_tree_hash)"
+  _cws_host_start_host "$hash" || return 1
+  wait_for_creds "$id" || return 0
+  if ! ensure_remote "$id" "$hash"; then
+    log "could not start the facade on $id"
+    return 1
+  fi
+
+  owner="$(tunnel_owner "$id")"
+  if [[ -n "$owner" ]]; then
+    log "tunnel for $id already held by pid $owner; watching"
+  else
+    log "starting tunnel for $id"
+    PYTHONPATH="$src" python3 "$src/tunnel.py" --workspace "$id" &
+    child=$!
+  fi
+
+  since=$(date +%s)
+  while sleep 5; do
+    if [[ "$(_cws_host_last_workspace 2>/dev/null)" != "$id" ]]; then
+      log "workspace changed from $id"
+      stop_child
+      _cws_host_teardown_tunnel "$id"
+      return 0
+    fi
+    if [[ -n "$child" ]] && ! kill -0 "$child" 2>/dev/null; then
+      wait "$child" 2>/dev/null
+      log "tunnel exited"
+      child=""
+      return 1
+    fi
+    if [[ -z "$child" && -z "$(tunnel_owner "$id")" ]]; then
+      log "external tunnel for $id went away"
+      return 0
+    fi
+    if [[ "$(_cws_host_tree_hash)" != "$hash" ]]; then
+      log "cws-host tree changed; resyncing"
+      stop_child
+      return 0
+    fi
+    _cws_host_host_healthy || _cws_host_start_host "$hash" || log "host is unhealthy"
+    now=$(date +%s)
+    if _cws_host_tunnel_ready "$id"; then
+      since=$now
+    elif (( now - since > READY_GRACE )) && ! creds_ok; then
+      log "tunnel down and creds expired"
+      stop_child
+      return 0
+    fi
+  done
+}
+
+cmd_run() {
+  local id
+  trap 'stop_child; exit 0' TERM INT HUP
+  mkdir -p "$STATE"
+  if [[ -f "$LOG" ]] && (( $(stat -f %z "$LOG") > 5000000 )); then
+    tail -c 1000000 "$LOG" >"$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  fi
+  log "started (pid $$)"
+  while true; do
+    id="$(_cws_host_last_workspace 2>/dev/null)"
+    if [[ -z "$id" ]]; then
+      sleep 30
+      continue
+    fi
+    link_once "$id" || sleep 10
+  done
+}
+
+write_plist() {
+  mkdir -p "${PLIST:h}" "$STATE"
+  cat >"$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>$SCRIPT</string>
+    <string>run</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>DOTFILES</key>
+    <string>$DOTFILES</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+  <key>StandardOutPath</key>
+  <string>$LOG</string>
+  <key>StandardErrorPath</key>
+  <string>$LOG</string>
+</dict>
+</plist>
+EOF
+}
+
+cmd_install() {
+  [[ -n "${1:-}" ]] && _cws_host_persist_workspace "$1"
+  write_plist
+  launchctl bootout "gui/$UID/$LABEL" 2>/dev/null
+  launchctl bootstrap "gui/$UID" "$PLIST" || return 1
+  print -r -- "cws-link: installed $LABEL for $(_cws_host_last_workspace 2>/dev/null || print '(no workspace yet; run cws-link use <id>)')"
+}
+
+cmd_uninstall() {
+  launchctl bootout "gui/$UID/$LABEL" 2>/dev/null
+  rm -f "$PLIST"
+  print -r -- "cws-link: removed $LABEL (tunnel and host stop with it; connect still works)"
+}
+
+cmd_use() {
+  [[ -n "${1:-}" ]] || { usage; return 1; }
+  _cws_host_persist_workspace "$1"
+  launchctl kickstart -k "gui/$UID/$LABEL" 2>/dev/null \
+    || print -r -- "cws-link: not installed; run cws-link install" >&2
+  print -r -- "cws-link: now linking $1"
+}
+
+cmd_status() {
+  local id
+  id="${1:-$(_cws_host_last_workspace 2>/dev/null)}"
+  launchctl print "gui/$UID/$LABEL" 2>/dev/null | grep -E '^\s+(state|pid|last exit code) =' \
+    || print -r -- "launchd job: not loaded"
+  [[ -n "$id" ]] || return 0
+  if _cws_host_tunnel_ready "$id"; then
+    print -r -- "tunnel: ready"
+  else
+    print -r -- "tunnel: not ready"
+  fi
+  _cws_host_status "$id"
+  command sf --log-level error ws ssh "$id" --options "-n -o BatchMode=yes" \
+    --command "printf 'facade unit: %s\n' \"\$(systemctl --user is-active $UNIT)\"
+SSH_AUTH_SOCK=/dev/shm/ssh-agent-\$USER.sock ssh-add -l >/dev/null 2>&1
+[ \$? -le 1 ] && echo 'ssh-agent forward: working' || echo 'ssh-agent forward: down'"
+  print -r -- "log: $LOG"
+}
+
+usage() {
+  print -r -- "usage: cws-link install [workspace_id] | use <workspace_id> | status [workspace_id] | uninstall | run" >&2
+}
+
+case "${1:-}" in
+  run) cmd_run ;;
+  install) shift; cmd_install "$@" ;;
+  uninstall) cmd_uninstall ;;
+  use) shift; cmd_use "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  *) usage; exit 1 ;;
+esac
