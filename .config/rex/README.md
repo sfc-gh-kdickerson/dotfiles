@@ -17,7 +17,9 @@ The prefix is **Ctrl+Space**. Press it, release it, then press the next key.
 | --- | --- |
 | Ctrl+Space | Send a literal Ctrl+Space to the terminal |
 | c | New tab |
-| n / p, Ctrl+n / Ctrl+p | Next / previous tab |
+| n, Ctrl+n / Ctrl+p | Next / previous tab |
+| p | Project picker (snowbox projects, sessions, zoxide) in a popup |
+| e | Agent picker (Cursor agents, ready first) in a popup |
 | 1–9 | Select tab by number |
 | , | Rename tab |
 | $ | Rename session |
@@ -55,6 +57,13 @@ the popup shell; prefix+X closes the whole tab.
 **prefix+g** opens lazygit in a separate popup using the source pane's directory.
 Quit lazygit with `q` to close it and return to the underlying pane. Repeating
 prefix+g while that tab's lazygit popup is open focuses it rather than duplicating it.
+**prefix+p** and **prefix+e** run `~/scripts/rex-picker` in a popup on the focused
+session's host: tmux-picker's fzf views and the `~/.config/tmux-picker` plugins,
+with `~/.config/rex-picker/lua/tmux_picker/tmux.lua` talking to Rex instead of tmux.
+Picking a project opens or creates its session and switches the window to it;
+C-n creates, C-a archives (and closes the session), C-e/C-p/C-t/C-x switch views.
+In the agents view, C-s sends a message to the selected agent without leaving.
+tmux keeps its own tmux-picker; both read the same plugins.
 **prefix+[** enters Rex's native copy mode in the focused terminal.
 Use `h/j/k/l` to move, `/` to search, `v` for character selection, `V` for lines,
 and Ctrl+V for rectangular selection. Press `y` or Enter to copy to the system
