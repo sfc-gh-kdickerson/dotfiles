@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Save this machine's Rex sessions and rebuild them after the server restarts.
+"""Bring Rex sessions' programs back after the server restarts.
 
-Rex keeps sessions while clients come and go, but not across a restart of the
-server or the machine. `watch` saves each session's tabs, split layout, working
-directories, and the agent conversation or program in each pane. When it finds
-a new server with no sessions, it rebuilds the last snapshot: agents come back
-with `agent --resume`, a few programs (nvim, lazygit, ...) are started again,
-and everything else is a shell in the pane's directory.
+A Rex server saves its sessions when it stops and restores their layouts, with
+the same block IDs, when it starts, but the programs that ran in them don't
+come back. `watch` saves each session's tabs, split layout, working directories,
+and the agent conversation or program in each pane. When it finds a new server
+instance, it types `agent --resume <id>` or the program (nvim, lazygit, ...)
+into each restored pane that sits at a shell prompt, and rebuilds whole
+sessions the server did not restore (a crash or kill before it could save).
 
 Usage: rex-snapshot save | watch | restore [--dry-run] [FILE] | show [FILE]
 """
@@ -98,9 +99,11 @@ def describe_block(session_id: str, block: dict) -> dict:
     label = block.get("label") or ""
     if label not in DEFAULT_BLOCK_LABELS:
         entry["label"] = label
+    block_id = block.get("block_id")
+    if block_id:
+        entry["block_id"] = block_id
     if block.get("creator_name") != TERMINAL:
         return entry
-    block_id = block["block_id"]
     try:
         info = rex("block", "call", "-s", session_id, "-b", block_id, "process") or {}
     except RexError:
@@ -110,16 +113,22 @@ def describe_block(session_id: str, block: dict) -> dict:
     cwd = foreground.get("cwd") or child.get("cwd")
     if cwd:
         entry["cwd"] = cwd
-    conversation = agent_conversation(block_id)
+    fg_pid = foreground.get("pid")
+    argv = cmdline(fg_pid) if fg_pid else []
+    conversation = agent_conversation(block_id) or resumed_conversation(argv)
     if conversation:
         entry["agent"] = conversation
-        return entry
-    fg_pid = foreground.get("pid")
-    if fg_pid:
-        argv = cmdline(fg_pid)
-        if argv and Path(argv[0]).name in RESTORE_PROGRAMS:
-            entry["command"] = user_command(argv)
+    elif argv and Path(argv[0]).name in RESTORE_PROGRAMS:
+        entry["command"] = user_command(argv)
     return entry
+
+
+def resumed_conversation(argv: list[str]) -> str | None:
+    """An agent relaunched with --resume has no hook record until its next prompt."""
+    if not argv or Path(argv[0]).name not in AGENT_PROGRAMS or "--resume" not in argv:
+        return None
+    index = argv.index("--resume") + 1
+    return argv[index] if index < len(argv) else None
 
 
 def user_command(argv: list[str]) -> list[str]:
@@ -173,7 +182,12 @@ def describe_session(session: dict) -> dict | None:
         windows.append(entry)
     if not windows:
         return None
-    return {"label": view.get("label") or session.get("label"), "active_window": active, "windows": windows}
+    return {
+        "session_id": view["session_id"],
+        "label": view.get("label") or session.get("label"),
+        "active_window": active,
+        "windows": windows,
+    }
 
 
 def read_snapshot(path: Path) -> dict | None:
@@ -232,15 +246,22 @@ def save(instance_id: str | None = None) -> dict:
     return snapshot
 
 
+def launch_input(entry: dict) -> str | None:
+    if entry.get("agent"):
+        return "agent --resume %s" % shlex.quote(entry["agent"])
+    if entry.get("command"):
+        return " ".join(shlex.quote(part) for part in entry["command"])
+    return None
+
+
 def restore_block(entry: dict) -> dict:
     options: dict = {}
     cwd = entry.get("cwd")
     if cwd and os.path.isdir(cwd):
         options["cwd"] = cwd
-    if entry.get("agent"):
-        options["initial_input"] = "agent --resume %s\r" % shlex.quote(entry["agent"])
-    elif entry.get("command"):
-        options["initial_input"] = " ".join(shlex.quote(part) for part in entry["command"]) + "\r"
+    text = launch_input(entry)
+    if text:
+        options["initial_input"] = text + "\r"
     block: dict = {"flavor": SHELL_FLAVOR}
     if options:
         block["options"] = options
@@ -263,12 +284,59 @@ def restore_layout(node: dict) -> dict:
     return {"block": restore_block(node.get("block") or {})}
 
 
+def panes(node: dict) -> list[dict]:
+    split = node.get("split")
+    if split:
+        return panes(split["before"]) + panes(split["after"])
+    return [node.get("block") or {}]
+
+
+def relaunch(snapshot: dict, dry_run: bool = False) -> int:
+    """Rex restores sessions with the same block IDs but not their programs.
+
+    Type each pane's agent or program back into its restored block, if the
+    block is sitting at a shell prompt.
+    """
+    current = {s.get("session_id") for s in (rex("ls", "--json") or {}).get("sessions") or []}
+    launched = 0
+    for session in snapshot.get("sessions") or []:
+        session_id = session.get("session_id")
+        if session_id not in current:
+            continue
+        for window in session.get("windows") or []:
+            for entry in panes(window["layout"]):
+                block_id = entry.get("block_id")
+                text = launch_input(entry)
+                if not block_id or not text:
+                    continue
+                try:
+                    info = rex("block", "call", "-s", session_id, "-b", block_id, "process") or {}
+                except RexError:
+                    continue
+                foreground = (info.get("foreground") or {}).get("pid")
+                if foreground and foreground != (info.get("child") or {}).get("pid"):
+                    continue
+                if dry_run:
+                    print("%s %s: %s" % (session.get("label"), block_id, text))
+                    continue
+                try:
+                    rex("send", "-s", session_id, "-b", block_id, text)
+                    rex("send-key", "-s", session_id, "-b", block_id, "enter")
+                except RexError as exc:
+                    log("could not relaunch in %s: %s" % (block_id, exc))
+                    continue
+                launched += 1
+                log("relaunched in %s/%s: %s" % (session.get("label"), block_id, text))
+    return launched
+
+
 def restore(snapshot: dict, dry_run: bool = False) -> int:
-    existing = {s.get("label") for s in (rex("ls", "--json") or {}).get("sessions") or []}
+    listed = (rex("ls", "--json") or {}).get("sessions") or []
+    existing = {s.get("label") for s in listed} | {s.get("session_id") for s in listed}
     restored = 0
     for session in snapshot.get("sessions") or []:
         label = session.get("label")
-        if label in existing:
+        if label in existing or session.get("session_id") in existing:
             log("session %s already exists; leaving it" % label)
             continue
         windows = []
@@ -306,14 +374,13 @@ def watch() -> None:
             status = rex("server", "status", "--json")
             instance = status["instance_id"]
             last = read_snapshot(LAST)
-            if (
-                status.get("session_count") == 0
-                and last
-                and last.get("sessions")
-                and last.get("instance_id") != instance
-            ):
-                log("server %s started empty; restoring %s" % (instance, last.get("saved_at")))
+            if last and last.get("sessions") and last.get("instance_id") != instance:
+                log("server %s is new; restoring %s" % (instance, last.get("saved_at")))
+                relaunched = relaunch(last)
                 restore(last)
+                if relaunched:
+                    # Let the typed commands start so the next save sees them.
+                    time.sleep(5)
             save(instance)
         except (RexError, subprocess.TimeoutExpired, KeyError, json.JSONDecodeError) as exc:
             log("cycle failed: %s" % exc)
@@ -322,13 +389,6 @@ def watch() -> None:
 
 def summarize(snapshot: dict) -> None:
     print("saved %s (server %s)" % (snapshot.get("saved_at"), snapshot.get("instance_id")))
-
-    def panes(node: dict) -> list[dict]:
-        split = node.get("split")
-        if split:
-            return panes(split["before"]) + panes(split["after"])
-        return [node.get("block") or {}]
-
     for session in snapshot.get("sessions") or []:
         print(session.get("label"))
         for window in session.get("windows") or []:
@@ -343,7 +403,7 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("save", help="save the current sessions now")
     sub.add_parser("watch", help="save periodically and restore after a restart")
-    p_restore = sub.add_parser("restore", help="rebuild sessions that are missing")
+    p_restore = sub.add_parser("restore", help="relaunch programs in restored panes and rebuild missing sessions")
     p_restore.add_argument("file", nargs="?", type=Path, default=LAST)
     p_restore.add_argument("--dry-run", action="store_true", help="print the requests only")
     p_show = sub.add_parser("show", help="summarize a snapshot")
@@ -359,6 +419,7 @@ def main(argv: list[str]) -> int:
         if not snapshot:
             print("no snapshot at %s" % args.file, file=sys.stderr)
             return 1
+        relaunch(snapshot, dry_run=args.dry_run)
         restore(snapshot, dry_run=args.dry_run)
     elif args.cmd == "show":
         snapshot = read_snapshot(args.file)
