@@ -310,8 +310,9 @@ bind("g", "lazygit_popup")
 
 -- tmux-picker's views (snowbox projects, Cursor agents, sessions) through
 -- ~/scripts/rex-picker, run on the host of the focused session. The picker stays
--- resident: after a pick or Esc it hides its block and starts a fresh fzf, so
--- the next press only shows an already drawn picker and switches its view.
+-- resident in each window: after a pick or Esc it minimizes its layer and starts
+-- a fresh fzf, so the next press restores an already drawn picker at its size.
+-- Each call here is a round trip to the session's host, so keep them few.
 local picker_bounds = { 0.15, 0.10, 0.70, 0.80 }
 local picker_label = "rex-picker-popup"
 -- The control bytes fzf binds to each view's switch key (C-p, C-e, C-t, C-x).
@@ -322,27 +323,27 @@ rex.action{
   args = { view = "string" },
   run = function(ctx, args)
     local view = assert(rex.session.view{})
-    local window_id = view.active_window_id
+    local layer_id, picker_id
     for _, window in ipairs(view.windows) do
-      if window.window_id == window_id and window.zoomed_block_id then
-        assert(rex.session.zoom_block{ block_id = window.zoomed_block_id, zoom = false })
+      if window.window_id == view.active_window_id then
+        if window.zoomed_block_id then
+          assert(rex.session.zoom_block{ block_id = window.zoomed_block_id, zoom = false })
+        end
+        for _, layer in ipairs(window.layers or {}) do
+          for _, block in ipairs(layer.kind == "floating" and layer.blocks or {}) do
+            if block.label == picker_label then layer_id, picker_id = layer.layer_id, block.block_id end
+          end
+        end
       end
     end
-    local picker
-    for _, block in ipairs(assert(rex.session.list_blocks{}).blocks or {}) do
-      if block.label == picker_label then picker = block; break end
-    end
-    if picker then
-      if picker.placement ~= "placed" or picker.window_id ~= window_id then
-        assert(rex.session.move_block{ block_id = picker.block_id, anchor_block_id = ctx.block_id })
-        assert(rex.session.float_block{ block_id = picker.block_id, bounds = picker_bounds })
-      end
-      assert(rex.session.focus_block{ block_id = picker.block_id })
+    if layer_id then
+      -- Switch the view while hidden so the stale list never shows.
       assert(rex.call("com.superlogical.terminal.write", {
         session_id = ctx.session_id,
-        block_id = picker.block_id,
+        block_id = picker_id,
         args = { data = picker_view_keys[args.view] or picker_view_keys.projects },
       }))
+      assert(rex.session.set_layer_state{ layer_id = layer_id, state = "normal", focus = true })
       return
     end
     local launch = [[

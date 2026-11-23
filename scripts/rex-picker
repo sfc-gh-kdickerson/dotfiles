@@ -5,8 +5,8 @@
 #
 #   rex-picker [VIEW]    open the picker (projects, agents, sessions, zoxide)
 #   rex-picker --resident VIEW
-#                        the popup's loop: after each pick or Esc, hide this
-#                        block and start the next fzf so it is drawn when shown
+#                        the popup's loop: after each pick or Esc, minimize this
+#                        layer and start the next fzf so it is drawn when shown
 #   rex-picker doctor    check views and plugins
 set -eu
 
@@ -64,11 +64,22 @@ if [ "$resident" = 0 ] || [ -z "${REX_BLOCK:-}" ]; then
   "$LUA_BIN" "$CONF/main.lua" "$@" || fail "picker failed"
   exit 0
 fi
-hide="{\"session_id\":\"${REX_SESSION:-}\",\"block_id\":\"$REX_BLOCK\"}"
+own_layer() {
+  rex --autostart=false api call session.view "{\"session_id\":\"${REX_SESSION:-}\"}" 2>/dev/null |
+    jq -r --arg block "$REX_BLOCK" \
+      'first(.windows[].layers[]? | select(.kind == "floating" and any(.blocks[]?; .block_id == $block)) | .layer_id) // empty'
+}
+minimize() {
+  [ -n "$1" ] && rex --autostart=false api call session.set_layer_state \
+    "{\"session_id\":\"${REX_SESSION:-}\",\"layer_id\":\"$1\",\"state\":\"minimized\"}" >/dev/null 2>&1
+}
+command -v jq >/dev/null || fail "jq not found"
+layer=""
 while :; do
   started=$SECONDS
   "$LUA_BIN" "$CONF/main.lua" "$@" || true
-  rex --autostart=false api call session.detach_block "$hide" >/dev/null 2>&1 || exit 0
+  # Out of its floating layer, the picker has no way back, so it closes.
+  minimize "$layer" || { layer="$(own_layer)"; minimize "$layer"; } || exit 0
   # A picker that dies on start would otherwise spin.
   [ $((SECONDS - started)) -ge 1 ] || sleep 1
 done
