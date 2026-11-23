@@ -312,7 +312,8 @@ bind("g", "lazygit_popup")
 -- the next press only shows an already drawn picker and switches its view.
 local picker_bounds = { 0.15, 0.10, 0.70, 0.80 }
 local picker_label = "rex-picker-popup"
-local picker_view_keys = { projects = "ctrl+p", agents = "ctrl+e", sessions = "ctrl+t", zoxide = "ctrl+x" }
+-- The control bytes fzf binds to each view's switch key (C-p, C-e, C-t, C-x).
+local picker_view_keys = { projects = "\16", agents = "\5", sessions = "\20", zoxide = "\24" }
 rex.action{
   name = "picker_popup",
   title = "Open Picker Popup",
@@ -335,7 +336,11 @@ rex.action{
         assert(rex.session.float_block{ block_id = picker.block_id, bounds = picker_bounds })
       end
       assert(rex.session.focus_block{ block_id = picker.block_id })
-      rex.client.queue("pane.send_key", { key = picker_view_keys[args.view] or "ctrl+p" })
+      assert(rex.call("com.superlogical.terminal.write", {
+        session_id = ctx.session_id,
+        block_id = picker.block_id,
+        args = { data = picker_view_keys[args.view] or picker_view_keys.projects },
+      }))
       return
     end
     local launch = [[
