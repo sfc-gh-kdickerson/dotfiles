@@ -194,7 +194,12 @@ rex.action{
     local blocks = assert(rex.session.list_blocks{}).blocks or {}
     local popup
     for _, block in ipairs(blocks) do
-      if block.label == popup_label then popup = block; break end
+      -- Ctrl+P is the picker's own projects view.
+      if block.block_id == ctx.block_id and block.label == "rex-picker-popup" then
+        rex.client.queue("pane.send_key", { key = "ctrl+p" })
+        return
+      end
+      if block.label == popup_label then popup = block end
     end
     -- Keep the old shared shell in its current window when upgrading the config.
     if not popup then
@@ -302,22 +307,40 @@ rex.action{
 bind("g", "lazygit_popup")
 
 -- tmux-picker's views (snowbox projects, Cursor agents, sessions) through
--- ~/scripts/rex-picker, run on the host of the focused session.
+-- ~/scripts/rex-picker, run on the host of the focused session. The picker stays
+-- resident: after a pick or Esc it hides its block and starts a fresh fzf, so
+-- the next press only shows an already drawn picker and switches its view.
 local picker_bounds = { 0.15, 0.10, 0.70, 0.80 }
+local picker_label = "rex-picker-popup"
+local picker_view_keys = { projects = "ctrl+p", agents = "ctrl+e", sessions = "ctrl+t", zoxide = "ctrl+x" }
 rex.action{
   name = "picker_popup",
   title = "Open Picker Popup",
   args = { view = "string" },
   run = function(ctx, args)
     local view = assert(rex.session.view{})
+    local window_id = view.active_window_id
     for _, window in ipairs(view.windows) do
-      if window.window_id == view.active_window_id and window.zoomed_block_id then
+      if window.window_id == window_id and window.zoomed_block_id then
         assert(rex.session.zoom_block{ block_id = window.zoomed_block_id, zoom = false })
       end
     end
+    local picker
+    for _, block in ipairs(assert(rex.session.list_blocks{}).blocks or {}) do
+      if block.label == picker_label then picker = block; break end
+    end
+    if picker then
+      if picker.placement ~= "placed" or picker.window_id ~= window_id then
+        assert(rex.session.move_block{ block_id = picker.block_id, anchor_block_id = ctx.block_id })
+        assert(rex.session.float_block{ block_id = picker.block_id, bounds = picker_bounds })
+      end
+      assert(rex.session.focus_block{ block_id = picker.block_id })
+      rex.client.queue("pane.send_key", { key = picker_view_keys[args.view] or "ctrl+p" })
+      return
+    end
     local launch = [[
 picker="$HOME/scripts/rex-picker"
-if [ -x "$picker" ]; then exec "$picker" "$1"; fi
+if [ -x "$picker" ]; then exec "$picker" --resident "$1"; fi
 echo "rex-picker is not installed on this host"; sleep 2
 ]]
     assert(rex.session.new_layer{
@@ -325,7 +348,7 @@ echo "rex-picker is not installed on this host"; sleep 2
       focus = true,
       layout = { block = {
         flavor = "com.superlogical.terminal.shell",
-        label = "rex-picker-popup",
+        label = picker_label,
         options = {
           command = { "/bin/sh", "-c", launch, "rex-picker", args.view },
           shell = "none",

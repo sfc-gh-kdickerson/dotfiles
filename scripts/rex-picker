@@ -4,6 +4,9 @@
 # init.lua opens it in a floating pane (prefix p: projects, prefix e: agents).
 #
 #   rex-picker [VIEW]    open the picker (projects, agents, sessions, zoxide)
+#   rex-picker --resident VIEW
+#                        the popup's loop: after each pick or Esc, hide this
+#                        block and start the next fzf so it is drawn when shown
 #   rex-picker doctor    check views and plugins
 set -eu
 
@@ -30,6 +33,12 @@ fail() {
   exit 1
 }
 
+resident=0
+if [ "${1:-}" = --resident ]; then
+  resident=1
+  shift
+fi
+
 case "${1:-}" in
   list | current | preview | switch-view | action | execute-action | fzf-enter | fzf-escape | kill | doctor) interactive=0 ;;
   *) interactive=1 ;;
@@ -51,4 +60,15 @@ if [ "$interactive" = 0 ]; then
 fi
 
 # fzf may draw on stderr, so errors print to the popup itself.
-"$LUA_BIN" "$CONF/main.lua" "$@" || fail "picker failed"
+if [ "$resident" = 0 ] || [ -z "${REX_BLOCK:-}" ]; then
+  "$LUA_BIN" "$CONF/main.lua" "$@" || fail "picker failed"
+  exit 0
+fi
+hide="{\"session_id\":\"${REX_SESSION:-}\",\"block_id\":\"$REX_BLOCK\"}"
+while :; do
+  started=$SECONDS
+  "$LUA_BIN" "$CONF/main.lua" "$@" || true
+  rex --autostart=false api call session.detach_block "$hide" >/dev/null 2>&1 || exit 0
+  # A picker that dies on start would otherwise spin.
+  [ $((SECONDS - started)) -ge 1 ] || sleep 1
+done
