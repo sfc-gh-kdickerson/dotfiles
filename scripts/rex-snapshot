@@ -9,7 +9,11 @@ instance, it types `agent --resume <id>` or the program (nvim, lazygit, ...)
 into each restored pane that sits at a shell prompt, and rebuilds whole
 sessions the server did not restore (a crash or kill before it could save).
 
+`import-tmux` rebuilds a tmux-resurrect save as Rex sessions once, resuming
+each Cursor agent pane with the newest conversation from its directory.
+
 Usage: rex-snapshot save | watch | restore [--dry-run] [FILE] | show [FILE]
+       rex-snapshot import-tmux [--dry-run] [--force] [FILE]
 """
 
 from __future__ import annotations
@@ -372,6 +376,162 @@ def restore(snapshot: dict, dry_run: bool = False) -> int:
     return restored
 
 
+TMUX_RESURRECT = HOME / ".tmux/resurrect/last"
+CHATS = HOME / ".config/cursor/chats"
+IMPORTED = SNAP_DIR / "imported-tmux.json"
+SKIP_TMUX_SESSIONS = {"scratch"}
+
+
+def tmux_layout(node: dict, entries: dict) -> dict:
+    """tmux-resurrect's JSON layout tree to a Rex layout of binary splits."""
+    if node.get("t") == "p":
+        return {"block": entries.get(node.get("i"), {})}
+    kids = node.get("c") or []
+    if len(kids) == 1:
+        return tmux_layout(kids[0], entries)
+    horizontal = node.get("t") == "h"
+    key = "w" if horizontal else "h"
+    total = sum(kid.get(key, 0) for kid in kids) or 1
+    rest = kids[1:]
+    after = tmux_layout({"t": node.get("t"), "c": rest}, entries) if len(rest) > 1 else tmux_layout(rest[0], entries)
+    return {
+        "split": {
+            "direction": "horizontal" if horizontal else "vertical",
+            "ratio": round(min(0.9, max(0.1, kids[0].get(key, 0) / total)), 3),
+            "before": tmux_layout(kids[0], entries),
+            "after": after,
+        }
+    }
+
+
+def chain_layout(entries: list[dict]) -> dict:
+    if len(entries) == 1:
+        return {"block": entries[0]}
+    return {"split": {"direction": "horizontal", "ratio": round(1 / len(entries), 3),
+                      "before": {"block": entries[0]}, "after": chain_layout(entries[1:])}}
+
+
+def conversations_by_cwd(cutoff_ms: int) -> dict[str, list[str]]:
+    """Agent CLI conversations that existed at the tmux save, newest first per cwd."""
+    found: dict[str, list[tuple[int, str]]] = {}
+    for meta in CHATS.glob("*/*/meta.json"):
+        try:
+            data = json.loads(meta.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not data.get("hasConversation") or (data.get("createdAtMs") or 0) > cutoff_ms:
+            continue
+        found.setdefault(data.get("cwd") or "", []).append((data.get("updatedAtMs") or 0, meta.parent.name))
+    return {cwd: [cid for _, cid in sorted(items, reverse=True)] for cwd, items in found.items()}
+
+
+def tmux_snapshot(path: Path) -> dict:
+    """A rex-snapshot from a tmux-resurrect save: tabs, splits, cwds, programs, agents."""
+    windows: dict[tuple[str, str], dict] = {}
+    pane_rows: dict[tuple[str, str], list[list[str]]] = {}
+    order: list[str] = []
+    for line in path.read_text().splitlines():
+        fields = line.split("\t")
+        if fields[0] == "window" and len(fields) >= 7:
+            windows[(fields[1], fields[2])] = {"name": fields[3].lstrip(":"), "active": fields[4] == "1",
+                                               "layout": fields[6]}
+            if fields[1] not in order:
+                order.append(fields[1])
+        elif fields[0] == "pane" and len(fields) >= 10:
+            pane_rows.setdefault((fields[1], fields[2]), []).append(fields)
+    conversations = conversations_by_cwd(int(path.stat().st_mtime * 1000))
+    sessions = []
+    for name in order:
+        if name in SKIP_TMUX_SESSIONS:
+            continue
+        session: dict = {"label": name, "active_window": 0, "windows": []}
+        keys = sorted((key for key in windows if key[0] == name), key=lambda key: int(key[1]))
+        for key in keys:
+            entries: dict = {}
+            for fields in pane_rows.get(key, []):
+                entry: dict = {}
+                cwd = fields[7].lstrip(":")
+                if cwd:
+                    entry["cwd"] = cwd
+                full = fields[10].lstrip(":") if len(fields) > 10 else ""
+                if fields[6].startswith("Cursor Agent"):
+                    queue = conversations.get(cwd) or []
+                    if queue:
+                        entry["agent"] = queue.pop(0)
+                    else:
+                        entry["agent_unknown"] = True
+                elif fields[9] in RESTORE_PROGRAMS and full:
+                    entry["command"] = shlex.split(full)
+                entries[int(fields[5])] = entry
+            try:
+                layout = tmux_layout(json.loads(windows[key]["layout"])["L"], entries)
+            except (json.JSONDecodeError, KeyError, TypeError):
+                layout = chain_layout([entries[i] for i in sorted(entries)] or [{}])
+            window: dict = {"layout": layout}
+            if windows[key]["name"] not in ("", "Window", "zsh", "bash"):
+                window["label"] = windows[key]["name"]
+            if windows[key]["active"]:
+                session["active_window"] = len(session["windows"])
+            session["windows"].append(window)
+        if session["windows"]:
+            sessions.append(session)
+    return {"version": 1, "saved_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            .isoformat(timespec="seconds"), "source": str(path), "sessions": sessions}
+
+
+def idle_lone_window(session_id: str) -> str | None:
+    """The only window of a session, if it is one pane sitting at a shell prompt."""
+    view = rex("session", "inspect", session_id, "--json")
+    windows = view.get("windows") or []
+    if len(windows) != 1:
+        return None
+    blocks = [b for layer in windows[0].get("layers") or [] for b in layer.get("blocks") or []]
+    if len(blocks) != 1:
+        return None
+    info = rex("block", "call", "-s", session_id, "-b", blocks[0]["block_id"], "process") or {}
+    if (info.get("foreground") or {}).get("pid") != (info.get("child") or {}).get("pid"):
+        return None
+    return windows[0]["window_id"]
+
+
+def import_tmux(path: Path, dry_run: bool = False, force: bool = False) -> int:
+    source = str(path.resolve())
+    done = read_snapshot(IMPORTED) or {}
+    if done.get("source") == source and not force:
+        print("already imported %s on %s (use --force)" % (source, done.get("imported_at")), file=sys.stderr)
+        return 1
+    snapshot = tmux_snapshot(path)
+    if dry_run:
+        summarize(snapshot)
+        return 0
+    listed = {s["label"]: s["session_id"] for s in (rex("ls", "--json") or {}).get("sessions") or []}
+    added = []
+    for session in snapshot["sessions"]:
+        session_id = listed.get(session["label"])
+        if not session_id:
+            continue
+        # Add the tmux tabs to a session Rex already has; drop its lone idle shell.
+        lone = idle_lone_window(session_id)
+        made = []
+        for window in session["windows"]:
+            request = {"session_id": session_id, "layout": restore_layout(window["layout"]), "focus": False}
+            if window.get("label"):
+                request["window_label"] = window["label"]
+            made.append(rex("api", "call", "-s", session_id, "session.new_window", "-", stdin=json.dumps(request)))
+        active = session.get("active_window", 0)
+        if 0 <= active < len(made):
+            rex("api", "call", "-s", session_id, "session.focus_window",
+                json.dumps({"window_id": made[active]["window_id"]}))
+        if lone:
+            rex("api", "call", "-s", session_id, "session.close_window", json.dumps({"window_id": lone}))
+        added.append(session["label"])
+        log("imported %d tmux tabs into existing session %s" % (len(made), session["label"]))
+    restored = restore({"sessions": [s for s in snapshot["sessions"] if s["label"] not in added]})
+    write_json(IMPORTED, {"source": source, "imported_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+    print("imported %d tmux sessions (%d new, %d merged)" % (restored + len(added), restored, len(added)))
+    return 0
+
+
 def watch() -> None:
     log("watching (every %ds, snapshots in %s)" % (INTERVAL, SNAP_DIR))
     while True:
@@ -399,7 +559,10 @@ def summarize(snapshot: dict) -> None:
         for window in session.get("windows") or []:
             print("  %s" % (window.get("label") or "(tab)"))
             for pane in panes(window["layout"]):
-                what = ("agent " + pane["agent"]) if pane.get("agent") else " ".join(pane.get("command") or ["shell"])
+                if pane.get("agent_unknown"):
+                    what = "agent (no matching conversation; shell)"
+                else:
+                    what = ("agent " + pane["agent"]) if pane.get("agent") else " ".join(pane.get("command") or ["shell"])
                 print("    %s  %s" % (pane.get("cwd", "~"), what))
 
 
@@ -411,6 +574,10 @@ def main(argv: list[str]) -> int:
     p_restore = sub.add_parser("restore", help="relaunch programs in restored panes and rebuild missing sessions")
     p_restore.add_argument("file", nargs="?", type=Path, default=LAST)
     p_restore.add_argument("--dry-run", action="store_true", help="print the requests only")
+    p_import = sub.add_parser("import-tmux", help="rebuild a tmux-resurrect save as Rex sessions, once")
+    p_import.add_argument("file", nargs="?", type=Path, default=TMUX_RESURRECT)
+    p_import.add_argument("--dry-run", action="store_true", help="show what would be created")
+    p_import.add_argument("--force", action="store_true", help="import a save that was imported before")
     p_show = sub.add_parser("show", help="summarize a snapshot")
     p_show.add_argument("file", nargs="?", type=Path, default=LAST)
     args = parser.parse_args(argv[1:])
@@ -426,6 +593,11 @@ def main(argv: list[str]) -> int:
             return 1
         relaunch(snapshot, dry_run=args.dry_run)
         restore(snapshot, dry_run=args.dry_run)
+    elif args.cmd == "import-tmux":
+        if not args.file.exists():
+            print("no tmux-resurrect save at %s" % args.file, file=sys.stderr)
+            return 1
+        return import_tmux(args.file, dry_run=args.dry_run, force=args.force)
     elif args.cmd == "show":
         snapshot = read_snapshot(args.file)
         if not snapshot:
