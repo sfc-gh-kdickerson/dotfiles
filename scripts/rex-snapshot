@@ -12,7 +12,10 @@ sessions the server did not restore (a crash or kill before it could save).
 `import-tmux` rebuilds a tmux-resurrect save as Rex sessions once, resuming
 each Cursor agent pane with the newest conversation from its directory.
 
-Usage: rex-snapshot save | watch | restore [--dry-run] [FILE] | show [FILE]
+`watch` also turns on systemd linger, which the workspace loses on reboot, so
+Rex keeps running after the last connection closes.
+
+Usage: rex-snapshot save | watch | linger | restore [--dry-run] [FILE] | show [FILE]
        rex-snapshot import-tmux [--dry-run] [--force] [FILE]
 """
 
@@ -532,8 +535,35 @@ def import_tmux(path: Path, dry_run: bool = False, force: bool = False) -> int:
     return 0
 
 
+def loginctl_user(prop: str) -> str:
+    try:
+        return subprocess.run(["loginctl", "show-user", str(os.getuid()), "-p", prop, "--value"],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def ensure_linger() -> bool:
+    """Keep the user manager, and so Rex and its agents, running with no login session.
+
+    The workspace resets /var/lib on reboot, and logind knows this uid by another
+    name than $USER (tpluser), so `loginctl enable-linger $USER` writes a file it
+    never reads. Write the file under logind's name.
+    """
+    if loginctl_user("Linger") == "yes":
+        return True
+    name = loginctl_user("Name")
+    if not name or "/" in name:
+        return False
+    subprocess.run(["sudo", "-n", "touch", "/var/lib/systemd/linger/" + name], capture_output=True, timeout=10)
+    enabled = loginctl_user("Linger") == "yes"
+    log("linger for %s: %s" % (name, "enabled" if enabled else "could not enable"))
+    return enabled
+
+
 def watch() -> None:
     log("watching (every %ds, snapshots in %s)" % (INTERVAL, SNAP_DIR))
+    ensure_linger()
     while True:
         try:
             status = rex("server", "status", "--json")
@@ -574,6 +604,7 @@ def main(argv: list[str]) -> int:
     p_restore = sub.add_parser("restore", help="relaunch programs in restored panes and rebuild missing sessions")
     p_restore.add_argument("file", nargs="?", type=Path, default=LAST)
     p_restore.add_argument("--dry-run", action="store_true", help="print the requests only")
+    sub.add_parser("linger", help="keep Rex running when no one is logged in")
     p_import = sub.add_parser("import-tmux", help="rebuild a tmux-resurrect save as Rex sessions, once")
     p_import.add_argument("file", nargs="?", type=Path, default=TMUX_RESURRECT)
     p_import.add_argument("--dry-run", action="store_true", help="show what would be created")
@@ -593,6 +624,8 @@ def main(argv: list[str]) -> int:
             return 1
         relaunch(snapshot, dry_run=args.dry_run)
         restore(snapshot, dry_run=args.dry_run)
+    elif args.cmd == "linger":
+        return 0 if ensure_linger() else 1
     elif args.cmd == "import-tmux":
         if not args.file.exists():
             print("no tmux-resurrect save at %s" % args.file, file=sys.stderr)

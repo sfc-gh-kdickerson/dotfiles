@@ -352,7 +352,7 @@ set -e
 export PATH="$HOME/.local/bin:$PATH"
 command -v rex >/dev/null || { echo "rex is not installed"; exit 1; }
 systemctl --user is-enabled --quiet rex.socket 2>/dev/null || { rex server install; systemctl --user enable --now rex.socket; }
-loginctl show-user "$USER" -p Linger | grep -q yes || sudo -n loginctl enable-linger "$USER"
+[ -x ~/scripts/rex-snapshot ] && ~/scripts/rex-snapshot linger || echo "linger is off: Rex stops when the last connection closes"
 if [ -e ~/.config/systemd/user/rex-snapshot.service ]; then
   systemctl --user daemon-reload
   systemctl --user enable --now rex-snapshot.service
