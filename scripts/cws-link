@@ -30,8 +30,17 @@ notify() {
   osascript -e "display notification \"$1\" with title \"cws-link\"" >/dev/null 2>&1 || true
 }
 
-creds_ok() {
+ssh_cert_ok() {
   command sf auth check </dev/null 2>&1 | grep -q 'Cloud Workspace SSH\.\.\. OK'
+}
+
+# The workspace ssh cert expires daily, but sf renews it on the next sf ws ssh
+# while the SnowIdentity login is still good. Only a failed renewal needs a login.
+creds_ok() {
+  ssh_cert_ok && return 0
+  command sf --log-level error ws ssh "$1" --options "-n -o BatchMode=yes -o ConnectTimeout=20" \
+    --command true </dev/null >/dev/null 2>&1 || return 1
+  ssh_cert_ok
 }
 
 # Exit 42 when the uploaded tree does not match the Mac's.
@@ -103,7 +112,7 @@ ensure_remote() {
 
 wait_for_creds() {
   local id="$1"
-  until creds_ok; do
+  until creds_ok "$id"; do
     log "cloud workspace ssh cert is not valid; waiting for sf auth login"
     notify "Run sf auth login to reconnect $id"
     sleep 120
@@ -175,7 +184,7 @@ link_once() {
     now=$(date +%s)
     if _cws_host_tunnel_ready "$id"; then
       since=$now
-    elif (( now - since > READY_GRACE )) && ! creds_ok; then
+    elif (( now - since > READY_GRACE )) && ! creds_ok "$id"; then
       log "tunnel down and creds expired"
       stop_child
       return 0
