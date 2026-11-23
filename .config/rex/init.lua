@@ -196,7 +196,9 @@ rex.action{
     for _, block in ipairs(blocks) do
       -- Ctrl+P is the picker's own projects view.
       if block.block_id == ctx.block_id and block.label == "rex-picker-popup" then
-        rex.client.queue("pane.send_key", { key = "ctrl+p" })
+        assert(rex.call("com.superlogical.terminal.write", {
+          session_id = ctx.session_id, block_id = block.block_id, args = { data = "\16" },
+        }))
         return
       end
       if block.label == popup_label then popup = block end
