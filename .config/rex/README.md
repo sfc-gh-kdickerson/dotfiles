@@ -63,6 +63,8 @@ with `~/.config/rex-picker/lua/tmux_picker/tmux.lua` talking to Rex instead of t
 Picking a project opens or creates its session and switches the window to it;
 C-n creates, C-a archives (and closes the session), C-e/C-p/C-t/C-x switch views.
 In the agents view, C-s sends a message to the selected agent without leaving.
+The picker stays running in each tab: a pick or Esc minimizes it and starts the next
+fzf, so only the first press in a tab waits for fzf to start.
 tmux keeps its own tmux-picker; both read the same plugins.
 **prefix+[** enters Rex's native copy mode in the focused terminal.
 Use `h/j/k/l` to move, `/` to search, `v` for character selection, `V` for lines,
