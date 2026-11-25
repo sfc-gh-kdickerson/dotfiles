@@ -34,6 +34,13 @@
 - Launch subagents with `async: true` by default. Use a blocking run only when the very next step cannot proceed without the result. Async runs can be resumed and steered, they survive a timeout, and they leave the session free
 - Don't give subagents time limits by default. Bound the work through scope instead: a narrow task, starting files, and a concrete deliverable
 
+# Drafts I'll paste
+
+- When giving me text to paste somewhere (GitHub, Jira, Slack, email), put the final version on my Mac clipboard with the `mac-host` MCP server's `clipboard_set` tool (a codemode script calling `mcp__mac_host__clipboard_set`), check it with `clipboard_get`, then tell me it's there. Still show it in chat so I can read it
+- Do not use `cbcopy` from the agent shell. It sends an OSC 52 escape that never reaches my terminal
+- Copy only the paste-ready text, with no surrounding commentary. If I edit the draft, copy the new version
+- Copying to the clipboard is not posting. Rules about asking before sending still apply
+
 # Execution
 
 - Execute requested work directly, including destructive operations and external side effects. Do not add confirmation gates

@@ -20,3 +20,7 @@
 
 # Installed by terminal-browser setup, not tracked.
 .agents/skills/terminal-browser
+
+# Pi: work-only config (internal gateway URL, MCP server names).
+.pi/agent/models.json
+.pi/agent/mcp.json

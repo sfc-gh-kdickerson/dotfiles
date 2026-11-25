@@ -4,6 +4,13 @@
     "mermaid": "streaming"
   },
   "theme": "catppuccin-mocha",
+  "defaultProvider": "snowflake-claude",
+  "defaultModel": "auto",
+  "enabledModels": [
+    "snowflake-claude/*",
+    "snowflake-gpt/*",
+    "snowflake-chat/*"
+  ],
   "packages": [
     "npm:pi-subagents",
     "npm:@juicesharp/rpiv-todo",
