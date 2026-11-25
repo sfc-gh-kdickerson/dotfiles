@@ -16,3 +16,6 @@ if [[ -d /etc/cloudws && -r /etc/zprofile ]]; then
   source /etc/zprofile
   unfunction sf
 fi
+
+# Machine-local login PATH and env; not tracked.
+[[ -r $HOME/.zprofile.local ]] && source "$HOME/.zprofile.local"

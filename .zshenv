@@ -8,3 +8,6 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 if [[ -d /etc/cloudws ]]; then
   unsetopt GLOBAL_RCS
 fi
+
+# Machine-local env and secrets; not tracked.
+[[ -r $HOME/.zshenv.local ]] && source "$HOME/.zshenv.local"
