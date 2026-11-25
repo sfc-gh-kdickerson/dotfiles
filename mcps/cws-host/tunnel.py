@@ -6,6 +6,10 @@ long-lived `sf ws ssh --command 'sleep infinity'` so the mux stays up,
 then `ssh -O forward -R` on that mux. If the holder or socket dies, we
 rebuild instead of exiting.
 
+The holder runs its own ControlMaster instead of sf's shared one. Cursor's
+Remote-SSH sessions pile up on the shared master until sshd's MaxSessions
+refuses new ones, and then nothing can run a command over it.
+
 sf's ssh config also reverse-forwards the dev-daemon and ssh-agent sockets.
 Every other ssh session to the workspace rebinds those paths and leaves them
 dead when it exits, so the holder probes them and forwards them again on its
@@ -223,9 +227,23 @@ def local_agent_sock():
     return path or None
 
 
+_remote_users = {}
+
+
+def remote_user(sock):
+    if sock not in _remote_users:
+        proc = mux_exec(sock, "id -un")
+        if proc is None or proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        _remote_users[sock] = proc.stdout.strip()
+    return _remote_users[sock]
+
+
 def socket_forwards(sock):
     """Remote:local unix socket specs sf's ssh config forwards, for the user on this mux."""
-    user = os.path.basename(sock).split("@", 1)[0]
+    user = remote_user(sock)
+    if not user:
+        return []
     pairs = [
         ("/dev/shm/dev-daemon.sock", os.path.expanduser("~/.cache/sfcli/dev-daemon.sock")),
         ("/dev/shm/ssh-agent-%s.sock" % user, local_agent_sock()),
@@ -289,6 +307,7 @@ def drop_workspace_muxes(ip, spec):
 def teardown_workspace(workspace_id):
     spec = "%d:127.0.0.1:%d" % (HOST_PORT, HOST_PORT)
     clear_ready(os.path.join(state_dir(), "tunnel-%s.ready" % workspace_id))
+    drop_mux(own_sock(workspace_id))
     try:
         ip = workspace_ip(workspace_id)
     except SystemExit as exc:
@@ -298,8 +317,16 @@ def teardown_workspace(workspace_id):
     return 0
 
 
+def own_sock(workspace_id):
+    return os.path.expanduser("~/.ssh/sfcli-socks/cws-link-%s" % workspace_id)
+
+
 def start_holder(workspace_id):
     # -n: stdin is /dev/null and must not close the session.
+    # The holder is the master for its own socket and takes the mux down with it.
+    sock = own_sock(workspace_id)
+    if not mux_alive(sock):
+        drop_mux(sock)
     return subprocess.Popen(
         [
             "sf",
@@ -307,7 +334,7 @@ def start_holder(workspace_id):
             "ssh",
             workspace_id,
             "--options",
-            "-n",
+            "-n -o ControlMaster=yes -o ControlPersist=no -o ControlPath=%s" % sock,
             "--command",
             "sleep infinity",
         ],
@@ -318,14 +345,13 @@ def start_holder(workspace_id):
     )
 
 
-def wait_sock(ip, timeout=12, should_stop=None):
+def wait_sock(sock, timeout=12, should_stop=None):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if should_stop and should_stop():
             return None
-        for sock in mux_socks(ip):
-            if mux_alive(sock):
-                return sock
+        if mux_alive(sock):
+            return sock
         time.sleep(0.2)
     return None
 
@@ -432,7 +458,7 @@ def main(argv):
                     eprint("mux holder exited %s" % holder.returncode)
                 eprint("starting mux holder")
                 holder = start_holder(workspace_id)
-            sock = wait_sock(ip, timeout=12, should_stop=lambda: stopping["done"])
+            sock = wait_sock(own_sock(workspace_id), timeout=12, should_stop=lambda: stopping["done"])
             if sock is None:
                 if stopping["done"]:
                     break
@@ -474,6 +500,12 @@ def main(argv):
                 ticks += 1
                 if ticks % SOCKET_CHECK_EVERY == 0:
                     heal_sockets(sock)
+                    if not remote_host_ok(sock, token):
+                        try:
+                            apply_forward(sock, spec, token)
+                            eprint("forward %s was down; forwarded it again" % spec)
+                        except RuntimeError as exc:
+                            eprint(str(exc))
                 if holder.poll() is not None:
                     eprint("mux holder exited %s" % holder.returncode)
                     holder = None
