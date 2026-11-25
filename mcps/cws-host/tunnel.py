@@ -5,6 +5,11 @@ sf's ControlMaster from a one-shot `ssh ... true` goes away. We keep a
 long-lived `sf ws ssh --command 'sleep infinity'` so the mux stays up,
 then `ssh -O forward -R` on that mux. If the holder or socket dies, we
 rebuild instead of exiting.
+
+sf's ssh config also reverse-forwards the dev-daemon and ssh-agent sockets.
+Every other ssh session to the workspace rebinds those paths and leaves them
+dead when it exits, so the holder probes them and forwards them again on its
+own mux whenever they stop answering.
 """
 
 from __future__ import print_function
@@ -22,6 +27,25 @@ from lock import open_and_lock, pid_alive, read_lock_pid, state_dir
 from protocol import HOST_PORT, daemonize, eprint, read_token
 
 READY_VERSION = "3"
+SOCKET_CHECK_EVERY = 10
+
+# Connect to each path; unlink and print the ones that refuse so they can be bound again.
+DEAD_SOCKETS = r"""python3 -c '
+import os, socket, sys
+for p in sys.argv[1:]:
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(2)
+    try:
+        s.connect(p)
+    except OSError:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+        print(p)
+    finally:
+        s.close()
+'"""
 
 
 def _ip_cache_path(workspace_id):
@@ -185,6 +209,54 @@ def cancel_forward(sock, spec):
         subprocess.run(mux_cmd(sock, "cancel", "-R", spec), capture_output=True, timeout=2)
     except subprocess.TimeoutExpired:
         pass
+
+
+def local_agent_sock():
+    path = os.environ.get("SSH_AUTH_SOCK")
+    if not path:
+        try:
+            path = subprocess.run(
+                ["launchctl", "getenv", "SSH_AUTH_SOCK"], capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            path = ""
+    return path or None
+
+
+def socket_forwards(sock):
+    """Remote:local unix socket specs sf's ssh config forwards, for the user on this mux."""
+    user = os.path.basename(sock).split("@", 1)[0]
+    pairs = [
+        ("/dev/shm/dev-daemon.sock", os.path.expanduser("~/.cache/sfcli/dev-daemon.sock")),
+        ("/dev/shm/ssh-agent-%s.sock" % user, local_agent_sock()),
+    ]
+    return [(remote, local) for remote, local in pairs if local and os.path.exists(local)]
+
+
+def heal_sockets(sock):
+    forwards = socket_forwards(sock)
+    if not forwards:
+        return
+    proc = mux_exec(sock, "%s %s" % (DEAD_SOCKETS, " ".join(shlex.quote(r) for r, _l in forwards)))
+    if proc is None or proc.returncode != 0:
+        return
+    dead = set(proc.stdout.split())
+    for remote, local in forwards:
+        if remote not in dead:
+            continue
+        spec = "%s:%s" % (remote, local)
+        cancel_forward(sock, spec)
+        try:
+            fwd = subprocess.run(
+                mux_cmd(sock, "forward", "-R", spec), capture_output=True, text=True, timeout=5
+            )
+        except subprocess.TimeoutExpired:
+            eprint("socket forward %s timed out" % remote)
+            continue
+        if fwd.returncode == 0:
+            eprint("socket forward %s was dead; forwarded it again" % remote)
+        else:
+            eprint("socket forward %s failed: %s" % (remote, fwd.stderr.strip()))
 
 
 def _socks_for_workspace(workspace_id):
@@ -395,8 +467,13 @@ def main(argv):
                 eprint("forward %s on %s (holder pid=%s)" % (spec, sock, holder.pid))
             fail_sleep = 1
             misses = 0
+            heal_sockets(sock)
+            ticks = 0
             while not stopping["done"]:
                 time.sleep(1)
+                ticks += 1
+                if ticks % SOCKET_CHECK_EVERY == 0:
+                    heal_sockets(sock)
                 if holder.poll() is not None:
                     eprint("mux holder exited %s" % holder.returncode)
                     holder = None

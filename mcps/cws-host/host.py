@@ -192,7 +192,8 @@ def run(cmd, timeout=60, input_bytes=None):
 
 
 def sf_ssh(workspace_id, remote_command, timeout=600, input_bytes=None):
-    cmd = ["sf", "ws", "ssh", workspace_id, "--command", remote_command]
+    # One-shot sessions must not rebind the dev-daemon and agent sockets that the tunnel holds.
+    cmd = ["sf", "ws", "ssh", workspace_id, "--options", "-o ClearAllForwardings=yes", "--command", remote_command]
     return run(cmd, timeout=timeout, input_bytes=input_bytes)
 
 

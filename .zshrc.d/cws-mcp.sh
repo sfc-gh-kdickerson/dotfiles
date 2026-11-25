@@ -4,7 +4,7 @@
 
 _cws_mcp_facade() {
   local id="$1" hash="$2" restart="${3:-0}"
-  command sf ws ssh "$id" --command "
+  command sf ws ssh "$id" --options "-o ClearAllForwardings=yes" --command "
 dir=\$HOME/.local/share/cws-host-mcp
 if [ ! -f \"\$dir/tree.sha\" ] || [ \"\$(cat \"\$dir/tree.sha\")\" != \"$hash\" ]; then
   exit 42

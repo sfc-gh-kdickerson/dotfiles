@@ -107,7 +107,7 @@ _cws_host_upload() {
   cp "${state}/token" "$stage/token"
   print -r -- "$hash" >"${stage}/tree.sha"
   COPYFILE_DISABLE=1 tar -C "$stage" -cf - . \
-    | command sf ws ssh "$id" --command 'mkdir -p ~/.local/share/cws-host-mcp && tar -C ~/.local/share/cws-host-mcp -xf - && chmod 600 ~/.local/share/cws-host-mcp/token && chmod 755 ~/.local/share/cws-host-mcp/cws-clipaste' \
+    | command sf ws ssh "$id" --options "-o ClearAllForwardings=yes" --command 'mkdir -p ~/.local/share/cws-host-mcp && tar -C ~/.local/share/cws-host-mcp -xf - && chmod 600 ~/.local/share/cws-host-mcp/token && chmod 755 ~/.local/share/cws-host-mcp/cws-clipaste' \
     || { rm -rf "$stage"; return 1; }
   rm -rf "$stage"
   print -r -- "cws-host: uploaded tree ${hash[1,12]}"
@@ -297,7 +297,7 @@ def probe(port, path="/health"):
         return "unreachable: %s" % exc
 print("host /health:", probe(HOST_PORT))
 ' || true
-  command sf ws ssh "$id" --command 'python3 - <<"PY"
+  command sf ws ssh "$id" --options "-o ClearAllForwardings=yes" --command 'python3 - <<"PY"
 import json
 from urllib.request import Request, urlopen
 try:
