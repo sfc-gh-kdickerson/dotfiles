@@ -2,20 +2,18 @@
 name: technical-doc-writing
 description: >
   Write and review structured engineering documents: design docs, RFCs,
-  one-pagers, implementation/technical specs, architecture decision records
-  (ADRs), and postmortems. Covers choosing the right format, structuring the
-  argument so a reader can decide or act, and reviewing a draft (yours or
-  someone else's) for the gaps that get docs sent back. Use whenever the user
-  is drafting, outlining, structuring, tightening, or reviewing any internal
-  engineering decision or design document — including phrasings like "write a
-  design doc", "draft an RFC", "turn this into a one-pager", "spec out the
-  implementation", "write an ADR", "write up the postmortem", "review my design
-  doc", or "does this doc make sense" — even when they don't name the
-  format. Prefers tables, diagrams, code blocks, and worked examples over
-  prose walls (show, don't tell). Tables are great but table exhaustion is a
-  real thing — don't table leftover sentences. Not for API reference, READMEs, tutorials,
-  or end-user docs, and not for general prose humanizing (that's the
-  natural-writing skill).
+  one-pagers, technical specs, architecture decision records (ADRs), and
+  postmortems. Covers choosing the format, structuring the argument so a
+  reader can decide or act, and reviewing a draft (yours or someone else's)
+  for gaps that get docs sent back. Use whenever the user is drafting,
+  outlining, structuring, tightening, or reviewing an internal engineering
+  decision or design document, including phrasings like "write a design doc",
+  "draft an RFC", "turn this into a one-pager", "spec out the implementation",
+  "write an ADR", "write up the postmortem", "review my design doc", or "does
+  this doc make sense", even when they don't name the format. Prefers tables,
+  diagrams, code blocks, and worked examples over prose walls. Don't table
+  leftover sentences. Not for API reference, READMEs, tutorials, end-user
+  docs, or general prose humanizing (use natural-writing).
 user_invocable: true
 arguments:
   - name: target
